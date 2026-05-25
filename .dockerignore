@@ -1,0 +1,10 @@
+.venv
+.venv-1
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+ngrok*
+*.zip
+.git

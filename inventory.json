@@ -1,0 +1,30 @@
+[
+  {
+    "barcode": "1",
+    "name": "1",
+    "price": 10.0,
+    "stock": 5,
+    "image": null
+  },
+  {
+    "barcode": "7",
+    "name": "2",
+    "price": 20.0,
+    "stock": 16,
+    "image": null
+  },
+  {
+    "barcode": "2",
+    "name": "3",
+    "price": 30.0,
+    "stock": 30,
+    "image": null
+  },
+  {
+    "barcode": "6",
+    "name": "6",
+    "price": 60.0,
+    "stock": 4,
+    "image": null
+  }
+]

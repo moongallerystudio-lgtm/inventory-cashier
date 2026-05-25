@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>库存管理与收银系统</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background: #f4f4f4; }
+    .card { background: #fff; padding: 20px; border-radius: 8px; max-width: 760px; margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    a.button { display: inline-block; margin: 8px 0; padding: 12px 18px; background: #007bff; color: #fff; text-decoration: none; border-radius: 6px; }
+    h1 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>库存管理与收银系统</h1>
+    <p>这是一个简单的库存管理与POS收银系统。你可以：</p>
+    <ul>
+      <li>在库存管理页面录入、修改或删除商品</li>
+      <li>在收银页面扫码或输入条形码，实时显示商品信息、单价和总价</li>
+      <li>结账后自动更新库存</li>
+    </ul>
+    <p>
+      <a class="button" href="/manage">库存管理</a>
+      <a class="button" href="/cashier">收银结账</a>
+      <a class="button" href="/members">会员管理</a>
+    </p>
+    <p>如果你希望用手机扫码，请在同一局域网下用手机浏览器访问：<strong>http://{{ host }}</strong></p>
+    <p>如果打不开，请确认电脑和手机在同一 Wi-Fi、端口未被防火墙阻断。</p>
+  </div>
+</body>
+</html>

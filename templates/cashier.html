@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>收银系统</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8Xedv6gH6p9YxQpggD3Elo+urV7rV4p5A2aYW+Lmzl0QWvssQeCNSi82im5UwG2bKrw0P5VxE5QxQ3s6g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #eef3f8; padding: 20px; }
+    .page { max-width: 1000px; margin: auto; }
+    .card { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+    .button { display: inline-block; padding: 12px 18px; border-radius: 6px; text-decoration: none; color: #fff; background: #007bff; margin-right: 10px; border: none; cursor: pointer; }
+    .button.red { background: #dc3545; }
+    .button.green { background: #28a745; }
+    .form-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; margin-bottom: 16px; }
+    input[type=text] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+    th { background: #f0f4f8; }
+    #videoWrapper { display: none; margin-top: 12px; }
+    video { width: 100%; max-height: 320px; border-radius: 10px; }
+    .summary { font-size: 1.1em; font-weight: 700; }
+    .notice { margin-top: 8px; color: #555; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>收银系统</h1>
+      <p>
+        <a class="button" href="/">返回首页</a>
+      </p>
+      <div class="card">
+        <h2>扫码录入商品</h2>
+        <div class="form-row">
+          <input id="cashierBarcode" type="text" placeholder="请扫码或输入条形码" />
+          <button type="button" class="button green" onclick="startScan('cashierBarcode')">开始扫码</button>
+          <button type="button" class="button" onclick="scanCashierBarcode()">添加商品</button>
+        </div>
+        <div id="videoWrapper" style="display:none; margin-top:12px;">
+          <video id="scanVideo" playsinline muted></video>
+          <div style="margin-top:12px;">
+            <button type="button" class="button red" onclick="stopScan()">停止扫码</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <input id="memberId" type="text" placeholder="输入会员卡号以获取折扣" />
+          <button class="button" onclick="verifyMember()">验证会员</button>
+          <button class="button" onclick="clearMember()">清除会员</button>
+        </div>
+        <p id="memberInfo" class="notice">当前未应用会员折扣。</p>
+        <div id="scanResult" class="notice"></div>
+        <p class="notice">打开摄像头后对准条形码即可扫描，识别成功后会自动填充条码。</p>
+      </div>
+      <div class="card">
+        <h2>购物车</h2>
+        <table>
+          <thead>
+            <tr><th>条形码</th><th>商品</th><th>单价</th><th>数量</th><th>小计</th></tr>
+          </thead>
+          <tbody id="cartBody">
+            {% if items %}
+              {% for item in items %}
+                <tr>
+                  <td>{{ item.barcode }}</td>
+                  <td>{{ item.name }}</td>
+                  <td>¥{{ '%.2f'|format(item.price) }}</td>
+                  <td>{{ item.qty }}</td>
+                  <td>¥{{ '%.2f'|format(item.subtotal) }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="5">购物车为空</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+        <p class="summary">原总价：¥<span id="cartTotal">{{ '%.2f'|format(total) }}</span></p>
+        <p class="summary">折后价：¥<span id="cartPayable">{{ '%.2f'|format(total) }}</span></p>
+        <p>
+          <button class="button green" onclick="checkout()">结账</button>
+          <button class="button" onclick="printReceipt()">打印小票</button>
+          <button class="button red" onclick="cancelCart()">取消购物车</button>
+        </p>
+        <p class="notice">结账后库存将自动减少。</p>
+      </div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+  <script src="/static/main.js"></script>
+</body>
+</html>
