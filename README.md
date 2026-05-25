@@ -55,3 +55,42 @@ docker run -p 5000:5000 inventory-cashier
 5. 部署后访问 Render 提供的 HTTPS 域名即可。
 
 > 如果你已经添加 `render.yaml`，Render 也会自动识别该配置并按定义创建服务。
+
+## 一键部署步骤
+
+1. 在 GitHub/GitLab 上创建一个新仓库。
+2. 在项目根目录执行：
+
+```bash
+git remote add origin <your-repo-url>
+git push -u origin main
+```
+
+3. 在 Render 控制台中：
+   - 创建 `Web Service`
+   - 选择 `Docker`
+   - 选择你刚刚推送的仓库
+   - 使用默认 `Dockerfile`
+4. 创建 PostgreSQL 数据库（例如 `inventory-cashier-db` Starter 计划）。
+5. 在 Render 服务设置中添加环境变量：
+   - `SECRET_KEY`
+   - `DATABASE_URL`（从 PostgreSQL 数据库自动注入或手动填写）
+
+## Render CLI 使用说明
+
+如果你已经设置了 Render API Token：
+
+```bash
+export RENDER_TOKEN=<your-render-api-token>
+./.venv-1/bin/render-cli list
+```
+
+该 CLI 目前可用于检查 Render 服务、查看环境变量和设置环境变量，但不一定支持创建新服务。
+
+你也可以运行：
+
+```bash
+./deploy_render.sh <your-repo-url>
+```
+
+该脚本会推送代码并给出下一步 Render 上线提示。
