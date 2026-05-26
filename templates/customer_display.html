@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang() }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ t('customer_display') }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; }
+    .page { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 28px; gap: 22px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 54px); letter-spacing: 0; }
+    .status { color: #cbd5e1; font-size: clamp(16px, 2vw, 24px); }
+    .language-switch { display: flex; gap: 8px; flex-wrap: wrap; }
+    .lang-link { padding: 8px 10px; border-radius: 8px; color: #e2e8f0; background: #1e293b; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #38bdf8; color: #082f49; }
+    .display { background: #111827; border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: clamp(12px, 2vw, 26px); border-bottom: 1px solid #334155; text-align: left; }
+    th { color: #93c5fd; font-size: clamp(15px, 2vw, 24px); background: #172033; }
+    td { font-size: clamp(18px, 2.5vw, 34px); }
+    tr:last-child td { border-bottom: none; }
+    .qty, .price, .subtotal { text-align: right; white-space: nowrap; }
+    .empty { min-height: 46vh; display: grid; place-items: center; color: #94a3b8; font-size: clamp(28px, 5vw, 64px); text-align: center; padding: 32px; }
+    .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 20px; background: #020617; border: 1px solid #334155; border-radius: 8px; padding: clamp(18px, 3vw, 34px); }
+    .total-label { color: #93c5fd; font-size: clamp(18px, 2.2vw, 30px); font-weight: 700; }
+    .total-value { color: #facc15; font-size: clamp(48px, 8vw, 110px); font-weight: 900; line-height: 0.95; }
+    .paid { color: #86efac; font-weight: 800; }
+    @media (max-width: 720px) {
+      .page { padding: 14px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      th:nth-child(2), td:nth-child(2) { display: none; }
+      .totalbar { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div>
+        <h1>{{ t('customer_display') }}</h1>
+        <div id="displayStatus" class="status">{{ t('waiting_for_cart') }}</div>
+      </div>
+      {{ language_switch() }}
+    </header>
+
+    <main class="display">
+      <table id="displayTable" hidden>
+        <thead>
+          <tr>
+            <th>{{ t('product_name') }}</th>
+            <th class="price">{{ t('price') }}</th>
+            <th class="qty">{{ t('qty') }}</th>
+            <th class="subtotal">{{ t('subtotal') }}</th>
+          </tr>
+        </thead>
+        <tbody id="displayBody"></tbody>
+      </table>
+      <div id="emptyState" class="empty">{{ t('waiting_for_cart') }}</div>
+    </main>
+
+    <footer class="totalbar">
+      <div>
+        <div class="total-label">{{ t('total') }}</div>
+        <div id="updatedAt" class="status"></div>
+      </div>
+      <div class="total-value">¥<span id="displayTotal">0</span></div>
+    </footer>
+  </div>
+
+  <script>
+    const labels = {
+      waiting: {{ t('waiting_for_cart')|tojson }},
+      paid: {{ t('paid')|tojson }},
+      lastUpdated: {{ t('last_updated')|tojson }}
+    };
+
+    function formatJpy(value) {
+      return String(Math.round(Number(value) || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderDisplay(data) {
+      const items = data.items || [];
+      const table = document.getElementById('displayTable');
+      const body = document.getElementById('displayBody');
+      const empty = document.getElementById('emptyState');
+      const status = document.getElementById('displayStatus');
+      const total = document.getElementById('displayTotal');
+      const updatedAt = document.getElementById('updatedAt');
+
+      body.innerHTML = '';
+      table.hidden = items.length === 0;
+      empty.hidden = items.length > 0;
+      empty.textContent = labels.waiting;
+
+      for (const item of items) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${escapeHtml(item.name)}</td>
+          <td class="price">¥${formatJpy(item.price)}</td>
+          <td class="qty">${item.qty}</td>
+          <td class="subtotal">¥${formatJpy(item.subtotal)}</td>
+        `;
+        body.appendChild(row);
+      }
+
+      total.textContent = formatJpy(data.total);
+      status.textContent = data.status === 'paid' ? labels.paid : (items.length ? '' : labels.waiting);
+      status.className = data.status === 'paid' ? 'status paid' : 'status';
+      updatedAt.textContent = data.updated_at ? `${labels.lastUpdated}: ${data.updated_at}` : '';
+    }
+
+    async function refreshDisplay() {
+      try {
+        const response = await fetch('/api/customer-display', { cache: 'no-store' });
+        if (!response.ok) return;
+        renderDisplay(await response.json());
+      } catch (error) {
+        console.warn('customer display refresh failed', error);
+      }
+    }
+
+    refreshDisplay();
+    setInterval(refreshDisplay, 1000);
+  </script>
+</body>
+</html>

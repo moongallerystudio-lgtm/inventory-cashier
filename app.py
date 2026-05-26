@@ -45,6 +45,7 @@ TRANSLATIONS = {
         "cashier": "收银结账",
         "members": "会员管理",
         "sales": "销售记录",
+        "customer_display": "顾客显示屏",
         "scan": "扫码",
         "start_scan": "开始扫码",
         "stop_scan": "停止扫码",
@@ -66,6 +67,7 @@ TRANSLATIONS = {
         "action": "操作",
         "original_total": "原总价",
         "payable": "折后价",
+        "total": "总计",
         "paid_amount": "实收金额",
         "payment_method": "付款方式",
         "cash": "现金",
@@ -85,6 +87,9 @@ TRANSLATIONS = {
         "no_member_discount": "当前未应用会员折扣。",
         "cart": "购物车",
         "empty_cart": "购物车为空",
+        "waiting_for_cart": "等待收银录入商品",
+        "last_updated": "最后更新",
+        "paid": "已结账",
         "stock_after_checkout": "结账后库存将自动减少。",
         "sales_order": "销售单",
         "time": "时间",
@@ -129,6 +134,7 @@ TRANSLATIONS = {
         "cashier": "Cashier",
         "members": "Members",
         "sales": "Sales Records",
+        "customer_display": "Customer Display",
         "scan": "Scan",
         "start_scan": "Start Scan",
         "stop_scan": "Stop Scan",
@@ -150,6 +156,7 @@ TRANSLATIONS = {
         "action": "Action",
         "original_total": "Original Total",
         "payable": "Payable",
+        "total": "Total",
         "paid_amount": "Paid Amount",
         "payment_method": "Payment Method",
         "cash": "Cash",
@@ -169,6 +176,9 @@ TRANSLATIONS = {
         "no_member_discount": "No member discount applied.",
         "cart": "Cart",
         "empty_cart": "Cart is empty",
+        "waiting_for_cart": "Waiting for items",
+        "last_updated": "Last Updated",
+        "paid": "Paid",
         "stock_after_checkout": "Stock will be reduced after checkout.",
         "sales_order": "Sale",
         "time": "Time",
@@ -213,6 +223,7 @@ TRANSLATIONS = {
         "cashier": "レジ会計",
         "members": "会員管理",
         "sales": "売上記録",
+        "customer_display": "お客様表示",
         "scan": "スキャン",
         "start_scan": "スキャン開始",
         "stop_scan": "スキャン停止",
@@ -234,6 +245,7 @@ TRANSLATIONS = {
         "action": "操作",
         "original_total": "元合計",
         "payable": "割引後",
+        "total": "合計",
         "paid_amount": "支払額",
         "payment_method": "支払方法",
         "cash": "現金",
@@ -253,6 +265,9 @@ TRANSLATIONS = {
         "no_member_discount": "会員割引は適用されていません。",
         "cart": "カート",
         "empty_cart": "カートは空です",
+        "waiting_for_cart": "商品入力待ち",
+        "last_updated": "最終更新",
+        "paid": "会計済み",
         "stock_after_checkout": "会計後に在庫が自動で減ります。",
         "sales_order": "売上",
         "time": "時間",
@@ -353,6 +368,13 @@ class SaleItem(db.Model):
     price = db.Column(db.Float, nullable=False, default=0.0)
     qty = db.Column(db.Integer, nullable=False, default=0)
     subtotal = db.Column(db.Float, nullable=False, default=0.0)
+
+
+class CustomerDisplayState(db.Model):
+    __tablename__ = "customer_display_state"
+    id = db.Column(db.Integer, primary_key=True)
+    payload = db.Column(db.Text, nullable=False, default="{}")
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
 
 
 def ensure_directories():
@@ -571,6 +593,46 @@ def cart_payload():
         "items": items,
         "total": round(total),
     }
+
+
+def display_payload(items=None, total=0, status="active"):
+    return {
+        "items": items or [],
+        "total": round(total or 0),
+        "status": status,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def save_customer_display(payload):
+    state = db.session.get(CustomerDisplayState, 1)
+    if not state:
+        state = CustomerDisplayState(id=1)
+        db.session.add(state)
+    state.payload = json.dumps(payload, ensure_ascii=False)
+    state.updated_at = datetime.now()
+    db.session.commit()
+    return payload
+
+
+def sync_customer_display_from_cart(status="active"):
+    items, total = cart_items()
+    return save_customer_display(display_payload(items, total, status))
+
+
+def get_customer_display_payload():
+    state = db.session.get(CustomerDisplayState, 1)
+    if not state:
+        return display_payload(status="idle")
+    try:
+        payload = json.loads(state.payload or "{}")
+    except json.JSONDecodeError:
+        return display_payload(status="idle")
+    payload.setdefault("items", [])
+    payload.setdefault("total", 0)
+    payload.setdefault("status", "idle")
+    payload.setdefault("updated_at", state.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
+    return payload
 
 
 def calculate_payable(total, member):
@@ -857,6 +919,16 @@ def cashier():
     return render_template("cashier.html", items=items, total=total)
 
 
+@app.route("/customer-display")
+def customer_display():
+    return render_template("customer_display.html")
+
+
+@app.route("/api/customer-display")
+def api_customer_display():
+    return jsonify(get_customer_display_payload())
+
+
 @app.route("/sales")
 def sales():
     report_date = parse_report_date(request.args.get("date", ""))
@@ -965,6 +1037,8 @@ def api_cashier_scan():
 
     cart[barcode] = qty
     save_cart(cart)
+    cart_data = cart_payload()
+    save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
     return jsonify({
         "product": {
             "barcode": product.barcode,
@@ -974,7 +1048,7 @@ def api_cashier_scan():
             "qty": qty,
             "image": product.image,
         },
-        "cart": cart_payload(),
+        "cart": cart_data,
     })
 
 
@@ -993,20 +1067,26 @@ def api_update_cart_item(barcode):
     if qty <= 0:
         cart.pop(barcode, None)
         save_cart(cart)
-        return jsonify({"success": True, "cart": cart_payload()})
+        cart_data = cart_payload()
+        save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
+        return jsonify({"success": True, "cart": cart_data})
 
     product = find_product(barcode)
     if not product:
         cart.pop(barcode, None)
         save_cart(cart)
-        return jsonify({"error": "商品不存在，已从购物车移除", "cart": cart_payload()}), 404
+        cart_data = cart_payload()
+        save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
+        return jsonify({"error": "商品不存在，已从购物车移除", "cart": cart_data}), 404
 
     if qty > product.stock:
         return jsonify({"error": f"库存不足，当前库存 {product.stock}"}), 400
 
     cart[barcode] = qty
     save_cart(cart)
-    return jsonify({"success": True, "cart": cart_payload()})
+    cart_data = cart_payload()
+    save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
+    return jsonify({"success": True, "cart": cart_data})
 
 
 @app.route("/api/cashier/cart/<barcode>", methods=["DELETE"])
@@ -1014,7 +1094,9 @@ def api_delete_cart_item(barcode):
     cart = get_cart()
     cart.pop(barcode, None)
     save_cart(cart)
-    return jsonify({"success": True, "cart": cart_payload()})
+    cart_data = cart_payload()
+    save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
+    return jsonify({"success": True, "cart": cart_data})
 
 
 @app.route("/api/cashier/checkout", methods=["POST"])
@@ -1072,6 +1154,11 @@ def api_checkout():
             subtotal=item["subtotal"],
         ))
     db.session.commit()
+    save_customer_display(display_payload(
+        [{key: item[key] for key in ("barcode", "name", "price", "qty", "subtotal")} for item in checkout_items],
+        payable,
+        "paid",
+    ))
     session["cart"] = {}
     message = f"结账完成，已记录销售单 #{sale.id}（{payment_method}）"
     if member:
@@ -1082,6 +1169,7 @@ def api_checkout():
 @app.route("/api/cashier/cancel", methods=["POST"])
 def api_cancel():
     session["cart"] = {}
+    save_customer_display(display_payload(status="idle"))
     return jsonify({"success": True})
 
 
