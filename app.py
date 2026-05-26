@@ -636,7 +636,7 @@ def get_customer_display_payload():
     payload.setdefault("total", 0)
     payload.setdefault("status", "idle")
     payload.setdefault("updated_at", state.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
-    if payload.get("status") == "paid" and (datetime.now() - state.updated_at).total_seconds() > 6:
+    if payload.get("status") == "paid" and (datetime.now() - state.updated_at).total_seconds() > 7:
         return save_customer_display(display_payload(status="idle"))
     return payload
 

@@ -33,32 +33,14 @@
     .total-label { color: #52525b; font-size: clamp(24px, 3vw, 42px); font-weight: 900; }
     .total-value { color: #111111; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
     .paid { color: #15803d; font-weight: 800; }
-    .thank-you {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      display: grid;
-      place-items: center;
-      background: rgba(247, 245, 239, 0.94);
-      opacity: 0;
-      pointer-events: none;
-      transform: scale(0.98);
-      transition: opacity 220ms ease, transform 220ms ease;
-    }
-    .thank-you.show {
-      opacity: 1;
-      transform: scale(1);
-    }
-    .thank-card {
+    .complete-panel {
+      min-height: 100%;
       display: grid;
       justify-items: center;
+      align-content: center;
       gap: 18px;
       background: #ffffff;
-      border: 1px solid #dedbd2;
-      border-radius: 8px;
       padding: clamp(28px, 5vw, 54px);
-      min-width: min(620px, calc(100vw - 32px));
-      box-shadow: 0 20px 70px rgba(17, 17, 17, 0.16);
     }
     .checkmark {
       width: clamp(76px, 12vw, 132px);
@@ -79,11 +61,11 @@
       transform: rotate(-45deg) scale(0);
       transform-origin: left bottom;
     }
-    .thank-you.show .checkmark::after {
+    .complete-panel.show .checkmark::after {
       animation: drawCheck 420ms ease 120ms forwards;
     }
-    .thank-logo { width: clamp(130px, 18vw, 220px); max-height: 220px; object-fit: contain; }
-    .thank-text { font-size: clamp(34px, 6vw, 82px); font-weight: 900; letter-spacing: 0; text-align: center; }
+    .complete-title { font-size: clamp(30px, 5vw, 72px); font-weight: 900; letter-spacing: 0; text-align: center; }
+    .complete-subtitle { font-size: clamp(24px, 4vw, 56px); font-weight: 900; letter-spacing: 0; text-align: center; color: #52525b; }
     @keyframes drawCheck {
       to { transform: rotate(-45deg) scale(1); }
     }
@@ -125,6 +107,11 @@
           </thead>
           <tbody id="displayBody"></tbody>
         </table>
+        <div id="completeState" class="complete-panel" hidden>
+          <div class="checkmark" aria-hidden="true"></div>
+          <div class="complete-title">会计完了</div>
+          <div class="complete-subtitle">感谢购入</div>
+        </div>
         <div id="emptyState" class="empty"></div>
       </section>
     </main>
@@ -137,19 +124,8 @@
     </footer>
   </div>
 
-  <div id="thankYouOverlay" class="thank-you" aria-live="polite">
-    <div class="thank-card">
-      <div class="checkmark" aria-hidden="true"></div>
-      <img class="thank-logo" src="/static/logo.jpg" alt="mooon shop">
-      <div class="thank-text">{{ t('thank_you') }}</div>
-    </div>
-  </div>
-
   <script>
-    const labels = {
-      paid: {{ t('paid')|tojson }}
-    };
-    let thankYouTimer = null;
+    let completeTimer = null;
     let lastStatus = null;
 
     function formatJpy(value) {
@@ -170,13 +146,16 @@
       const table = document.getElementById('displayTable');
       const body = document.getElementById('displayBody');
       const empty = document.getElementById('emptyState');
+      const complete = document.getElementById('completeState');
       const status = document.getElementById('displayStatus');
       const total = document.getElementById('displayTotal');
-      const overlay = document.getElementById('thankYouOverlay');
 
       body.innerHTML = '';
-      table.hidden = items.length === 0;
-      empty.hidden = items.length > 0;
+      const isPaid = data.status === 'paid';
+      table.hidden = isPaid || items.length === 0;
+      empty.hidden = isPaid || items.length > 0;
+      complete.hidden = !isPaid;
+      complete.classList.toggle('show', isPaid && lastStatus !== 'paid');
 
       for (const item of items) {
         const row = document.createElement('tr');
@@ -196,22 +175,19 @@
       }
 
       total.textContent = formatJpy(data.total);
-      status.textContent = data.status === 'paid' ? labels.paid : '';
-      status.className = data.status === 'paid' ? 'status paid' : 'status';
+      status.textContent = '';
+      status.className = 'status';
 
-      if (data.status === 'paid' && lastStatus !== 'paid') {
-        overlay.classList.add('show');
-        clearTimeout(thankYouTimer);
-        thankYouTimer = setTimeout(() => {
-          overlay.classList.remove('show');
+      if (isPaid && lastStatus !== 'paid') {
+        clearTimeout(completeTimer);
+        completeTimer = setTimeout(() => {
+          complete.hidden = true;
+          complete.classList.remove('show');
           table.hidden = true;
           empty.hidden = false;
           body.innerHTML = '';
           total.textContent = '0';
-          status.textContent = '';
-        }, 4200);
-      } else {
-        overlay.classList.remove('show');
+        }, 5000);
       }
       lastStatus = data.status;
     }
