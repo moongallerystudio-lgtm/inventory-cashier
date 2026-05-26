@@ -3,33 +3,46 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>{{ t('customer_display') }}</title>
+  <title>mooon shop</title>
   <style>
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; }
-    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; position: fixed; inset: 0; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f7f5ef; color: #18181b; position: fixed; inset: 0; }
     .page { height: 100dvh; max-height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 16px; gap: 12px; overflow: hidden; }
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    h1 { margin: 0; font-size: clamp(22px, 3.2vw, 42px); letter-spacing: 0; }
-    .status { color: #cbd5e1; font-size: clamp(13px, 1.7vw, 20px); }
+    h1 { margin: 0; font-size: clamp(24px, 3.4vw, 46px); letter-spacing: 0; text-transform: lowercase; }
+    .status { color: #52525b; font-size: clamp(13px, 1.7vw, 20px); }
     .language-switch { display: flex; gap: 8px; flex-wrap: wrap; }
-    .lang-link { padding: 8px 10px; border-radius: 8px; color: #e2e8f0; background: #1e293b; text-decoration: none; font-weight: 700; }
-    .lang-link.active { background: #38bdf8; color: #082f49; }
-    .display { min-height: 0; background: #111827; border: 1px solid #334155; border-radius: 8px; overflow: auto; -webkit-overflow-scrolling: touch; }
+    .lang-link { padding: 8px 10px; border-radius: 8px; color: #27272a; background: #e7e5df; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #111111; color: #ffffff; }
+    .content { min-height: 0; display: grid; grid-template-columns: minmax(230px, 0.36fr) minmax(0, 0.64fr); gap: 12px; }
+    .brand-panel { min-height: 0; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: center; padding: 18px; overflow: hidden; }
+    .brand-logo { width: 100%; max-width: 420px; max-height: 100%; object-fit: contain; justify-self: center; }
+    .brand-caption { margin-top: 10px; text-align: center; font-size: clamp(16px, 2vw, 26px); font-weight: 800; letter-spacing: 0; text-transform: lowercase; }
+    .display { min-height: 0; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; overflow: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: clamp(8px, 1.35vw, 18px); border-bottom: 1px solid #334155; text-align: left; }
-    th { position: sticky; top: 0; z-index: 1; color: #93c5fd; font-size: clamp(13px, 1.6vw, 20px); background: #172033; }
+    th, td { padding: clamp(8px, 1.35vw, 18px); border-bottom: 1px solid #e4e1d8; text-align: left; }
+    th { position: sticky; top: 0; z-index: 1; color: #52525b; font-size: clamp(13px, 1.6vw, 20px); background: #f0eee7; }
     td { font-size: clamp(16px, 2.2vw, 28px); }
     tr:last-child td { border-bottom: none; }
+    .item-cell { display: grid; grid-template-columns: clamp(44px, 6vw, 76px) 1fr; gap: 12px; align-items: center; }
+    .item-image { width: clamp(44px, 6vw, 76px); aspect-ratio: 1; border: 1px solid #e4e1d8; border-radius: 8px; object-fit: cover; background: #ffffff; }
+    .item-name { font-weight: 800; }
     .qty, .price, .subtotal { text-align: right; white-space: nowrap; }
-    .empty { height: 100%; min-height: 0; display: grid; place-items: center; color: #94a3b8; font-size: clamp(24px, 4.2vw, 52px); text-align: center; padding: 24px; }
-    .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; background: #020617; border: 1px solid #334155; border-radius: 8px; padding: clamp(12px, 2vw, 24px); }
-    .total-label { color: #93c5fd; font-size: clamp(16px, 1.9vw, 24px); font-weight: 700; }
-    .total-value { color: #facc15; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
-    .paid { color: #86efac; font-weight: 800; }
+    .empty { height: 100%; min-height: 0; display: grid; place-items: center; color: #71717a; font-size: clamp(24px, 4.2vw, 52px); text-align: center; padding: 24px; }
+    .empty-inner { display: grid; justify-items: center; gap: 16px; }
+    .empty-logo { width: min(280px, 55%); max-height: 38vh; object-fit: contain; opacity: 0.9; }
+    .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; background: #111111; border: 1px solid #111111; border-radius: 8px; padding: clamp(12px, 2vw, 24px); color: #ffffff; }
+    .total-label { color: #d4d4d8; font-size: clamp(16px, 1.9vw, 24px); font-weight: 700; }
+    .total-value { color: #ffffff; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
+    .paid { color: #15803d; font-weight: 800; }
     @media (max-width: 720px) {
       .page { padding: 10px; gap: 8px; }
       .topbar { align-items: stretch; flex-direction: column; gap: 8px; }
+      .content { grid-template-columns: 1fr; grid-template-rows: minmax(110px, 0.28fr) minmax(0, 0.72fr); }
+      .brand-panel { grid-template-columns: auto 1fr; grid-template-rows: 1fr; gap: 12px; padding: 10px; }
+      .brand-logo { width: auto; height: 100%; max-width: 120px; }
+      .brand-caption { margin-top: 0; text-align: left; }
       th:nth-child(2), td:nth-child(2) { display: none; }
       .totalbar { align-items: center; flex-direction: row; }
       .updated-at { display: none; }
@@ -40,25 +53,37 @@
   <div class="page">
     <header class="topbar">
       <div>
-        <h1>{{ t('customer_display') }}</h1>
+        <h1>mooon shop</h1>
         <div id="displayStatus" class="status">{{ t('waiting_for_cart') }}</div>
       </div>
       {{ language_switch() }}
     </header>
 
-    <main class="display">
-      <table id="displayTable" hidden>
-        <thead>
-          <tr>
-            <th>{{ t('product_name') }}</th>
-            <th class="price">{{ t('price') }}</th>
-            <th class="qty">{{ t('qty') }}</th>
-            <th class="subtotal">{{ t('subtotal') }}</th>
-          </tr>
-        </thead>
-        <tbody id="displayBody"></tbody>
-      </table>
-      <div id="emptyState" class="empty">{{ t('waiting_for_cart') }}</div>
+    <main class="content">
+      <section class="brand-panel" aria-label="mooon shop">
+        <img class="brand-logo" src="/static/mooon-shop-logo.svg" alt="mooon shop">
+        <div class="brand-caption">mooon shop</div>
+      </section>
+
+      <section class="display">
+        <table id="displayTable" hidden>
+          <thead>
+            <tr>
+              <th>{{ t('product_name') }}</th>
+              <th class="price">{{ t('price') }}</th>
+              <th class="qty">{{ t('qty') }}</th>
+              <th class="subtotal">{{ t('subtotal') }}</th>
+            </tr>
+          </thead>
+          <tbody id="displayBody"></tbody>
+        </table>
+        <div id="emptyState" class="empty">
+          <div class="empty-inner">
+            <img class="empty-logo" src="/static/mooon-shop-logo.svg" alt="mooon shop">
+            <span>{{ t('waiting_for_cart') }}</span>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="totalbar">
@@ -106,8 +131,14 @@
 
       for (const item of items) {
         const row = document.createElement('tr');
+        const imageSrc = item.image ? `/static/${escapeHtml(item.image)}` : '/static/mooon-shop-logo.svg';
         row.innerHTML = `
-          <td>${escapeHtml(item.name)}</td>
+          <td>
+            <div class="item-cell">
+              <img class="item-image" src="${imageSrc}" alt="">
+              <span class="item-name">${escapeHtml(item.name)}</span>
+            </div>
+          </td>
           <td class="price">¥${formatJpy(item.price)}</td>
           <td class="qty">${item.qty}</td>
           <td class="subtotal">¥${formatJpy(item.subtotal)}</td>

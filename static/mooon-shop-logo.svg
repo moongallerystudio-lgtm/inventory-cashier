@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-label="mooon shop">
+  <rect width="900" height="900" fill="#ffffff"/>
+  <g fill="none" stroke="#111111" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M250 405c-33 17-57 54-63 102-8 66 23 132 80 152 47 17 130 17 177 0 57-20 88-86 80-152-6-48-30-85-63-102"/>
+    <path d="M274 372c-18-39 10-76 43-51 14-39 78-39 92 0 33-25 61 12 43 51"/>
+    <path d="M282 561c43 22 106 22 148 0"/>
+    <path d="M294 455h1M410 455h1M345 525h22"/>
+    <path d="M340 289v72M340 289c-34-19-6-54 26-35"/>
+    <path d="M538 420c-27 24-44 62-46 105-3 76 43 139 112 152 38 7 88 7 126 0 69-13 115-76 112-152-2-43-19-81-46-105"/>
+    <path d="M585 405c-60-130 96-190 108-61 65-69 138 14 82 119"/>
+    <path d="M607 617c33 18 88 18 122 0"/>
+    <path d="M607 514h1M704 514h1M657 561h20"/>
+    <path d="M746 618l72 28-30 91-83-33 41-86z"/>
+    <path d="M760 650l39 16M746 680l42 17M732 710l45 18"/>
+    <path d="M184 454l-39-18M171 512l-44-1M185 569l-38 18"/>
+    <path d="M794 454l39-18M807 512l44-1M793 569l38 18"/>
+    <path d="M210 708c136 34 351 44 536 13"/>
+  </g>
+  <g fill="#111111" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="10">
+    <text x="450" y="145" text-anchor="middle" font-size="82">mooon</text>
+    <text x="450" y="835" text-anchor="middle" font-size="76">SHOP</text>
+  </g>
+</svg>

@@ -582,6 +582,7 @@ def cart_items():
             "price": product.price,
             "qty": qty,
             "subtotal": subtotal,
+            "image": product.image,
         })
         total += subtotal
     return items, total
@@ -1126,6 +1127,7 @@ def api_checkout():
             "price": product.price,
             "qty": qty,
             "subtotal": subtotal,
+            "image": product.image,
         })
 
     total = round(total)
@@ -1155,7 +1157,7 @@ def api_checkout():
         ))
     db.session.commit()
     save_customer_display(display_payload(
-        [{key: item[key] for key in ("barcode", "name", "price", "qty", "subtotal")} for item in checkout_items],
+        [{key: item[key] for key in ("barcode", "name", "price", "qty", "subtotal", "image")} for item in checkout_items],
         payable,
         "paid",
     ))
