@@ -61,7 +61,7 @@
 
     <main class="content">
       <section class="brand-panel" aria-label="mooon shop">
-        <img class="brand-logo" src="/static/mooon-shop-logo.svg" alt="mooon shop">
+        <img class="brand-logo" src="/static/logo.jpg" alt="mooon shop">
         <div class="brand-caption">mooon shop</div>
       </section>
 
@@ -79,7 +79,7 @@
         </table>
         <div id="emptyState" class="empty">
           <div class="empty-inner">
-            <img class="empty-logo" src="/static/mooon-shop-logo.svg" alt="mooon shop">
+            <img class="empty-logo" src="/static/logo.jpg" alt="mooon shop">
             <span>{{ t('waiting_for_cart') }}</span>
           </div>
         </div>
@@ -131,7 +131,7 @@
 
       for (const item of items) {
         const row = document.createElement('tr');
-        const imageSrc = item.image ? `/static/${escapeHtml(item.image)}` : '/static/mooon-shop-logo.svg';
+        const imageSrc = item.image ? `/static/${escapeHtml(item.image)}` : '/static/logo.jpg';
         row.innerHTML = `
           <td>
             <div class="item-cell">
