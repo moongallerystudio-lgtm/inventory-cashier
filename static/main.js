@@ -643,8 +643,8 @@ function renderProductResults(products) {
     button.disabled = disabled;
     button.onclick = () => addProductByBarcode(product.barcode);
 
-    const image = product.image
-      ? `<img class="product-thumb" src="/static/${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">`
+    const image = product.image_url
+      ? `<img class="product-thumb" src="${escapeHtml(product.image_url)}" alt="${escapeHtml(product.name)}" onerror="this.onerror=null;this.src='/static/logo.jpg';">`
       : `<div class="product-thumb product-placeholder">${escapeHtml(tr('noImage', '无图'))}</div>`;
 
     button.innerHTML = `

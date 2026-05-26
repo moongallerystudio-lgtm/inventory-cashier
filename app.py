@@ -7,6 +7,7 @@ from pathlib import Path
 import csv
 import io
 import json
+import mimetypes
 import socket
 from datetime import datetime, time
 import openpyxl
@@ -328,14 +329,19 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=False, default=0.0)
     stock = db.Column(db.Integer, nullable=False, default=0)
     image = db.Column(db.String(512), nullable=True)
+    image_data = db.Column(db.LargeBinary, nullable=True)
+    image_mime = db.Column(db.String(128), nullable=True)
 
     def to_dict(self):
+        has_image = bool(self.image_data or self.image)
         return {
             "barcode": self.barcode,
             "name": self.name,
             "price": self.price,
             "stock": self.stock,
             "image": self.image,
+            "has_image": has_image,
+            "image_url": f"/product-image/{self.barcode}" if has_image else None,
         }
 
 class Member(db.Model):
@@ -389,7 +395,16 @@ def ensure_directories():
 
 def ensure_schema():
     inspector = inspect(db.engine)
-    if "sales" not in inspector.get_table_names():
+    table_names = inspector.get_table_names()
+    if "products" in table_names:
+        product_columns = {column["name"] for column in inspector.get_columns("products")}
+        if "image_data" not in product_columns:
+            image_data_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
+            db.session.execute(text(f"ALTER TABLE products ADD COLUMN image_data {image_data_type}"))
+        if "image_mime" not in product_columns:
+            db.session.execute(text("ALTER TABLE products ADD COLUMN image_mime VARCHAR(128)"))
+        db.session.commit()
+    if "sales" not in table_names:
         return
     sale_columns = {column["name"] for column in inspector.get_columns("sales")}
     if "payment_method" not in sale_columns:
@@ -397,10 +412,24 @@ def ensure_schema():
         db.session.commit()
 
 
+def backfill_product_image_data():
+    changed = False
+    products = Product.query.filter(Product.image.isnot(None), Product.image_data.is_(None)).all()
+    for product in products:
+        image_path = BASE / "static" / product.image
+        if image_path.exists() and image_path.is_file():
+            product.image_data = image_path.read_bytes()
+            product.image_mime = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
+            changed = True
+    if changed:
+        db.session.commit()
+
+
 with app.app_context():
     ensure_directories()
     db.create_all()
     ensure_schema()
+    backfill_product_image_data()
 
 
 def get_language():
@@ -522,6 +551,32 @@ def save_image_file(file_storage, barcode):
     return f"uploads/{target_name}"
 
 
+def save_product_image(file_storage, barcode):
+    if not file_storage:
+        return None
+    filename = secure_filename(file_storage.filename)
+    if not filename:
+        return None
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_IMAGE_EXTENSIONS:
+        return None
+    image_bytes = file_storage.read()
+    if not image_bytes:
+        return None
+    ensure_directories()
+    target_name = f"{secure_filename(barcode)}{suffix}"
+    target_path = UPLOADS_DIR / target_name
+    try:
+        target_path.write_bytes(image_bytes)
+    except Exception:
+        pass
+    return {
+        "path": f"uploads/{target_name}",
+        "data": image_bytes,
+        "mime": file_storage.mimetype or "image/jpeg",
+    }
+
+
 def update_product(product):
     existing = Product.query.get(product["barcode"])
     if existing:
@@ -529,6 +584,9 @@ def update_product(product):
         existing.price = product["price"]
         existing.stock = product["stock"]
         existing.image = product.get("image")
+        if "image_data" in product:
+            existing.image_data = product.get("image_data")
+            existing.image_mime = product.get("image_mime")
     else:
         existing = Product(
             barcode=product["barcode"],
@@ -536,6 +594,8 @@ def update_product(product):
             price=product["price"],
             stock=product["stock"],
             image=product.get("image"),
+            image_data=product.get("image_data"),
+            image_mime=product.get("image_mime"),
         )
         db.session.add(existing)
     db.session.commit()
@@ -589,6 +649,7 @@ def cart_items():
             "qty": qty,
             "subtotal": subtotal,
             "image": product.image,
+            "image_url": f"/product-image/{product.barcode}" if (product.image_data or product.image) else None,
         })
         total += subtotal
     return items, total
@@ -756,6 +817,28 @@ def index():
     return render_template("index.html", host=request.host, local_ip=get_local_ip())
 
 
+@app.route("/product-image/<path:barcode>")
+def product_image(barcode):
+    product = Product.query.get(barcode)
+    if product:
+        if product.image_data:
+            return send_file(
+                io.BytesIO(product.image_data),
+                mimetype=product.image_mime or "image/jpeg",
+                download_name=f"{secure_filename(product.barcode) or 'product'}.jpg",
+                max_age=3600,
+            )
+        if product.image:
+            image_path = BASE / "static" / product.image
+            if image_path.exists() and image_path.is_file():
+                return send_file(
+                    image_path,
+                    mimetype=mimetypes.guess_type(str(image_path))[0] or "image/jpeg",
+                    max_age=3600,
+                )
+    return redirect(url_for("static", filename="logo.jpg"))
+
+
 @app.route("/manage")
 def manage():
     inventory = load_inventory()
@@ -785,15 +868,21 @@ def manage_add():
 
     existing = find_product(barcode)
     image_path = existing.image if existing else None
-    uploaded_image = save_image_file(image_file, barcode)
+    image_data = existing.image_data if existing else None
+    image_mime = existing.image_mime if existing else None
+    uploaded_image = save_product_image(image_file, barcode)
     if uploaded_image:
-        image_path = uploaded_image
+        image_path = uploaded_image["path"]
+        image_data = uploaded_image["data"]
+        image_mime = uploaded_image["mime"]
     product = {
         "barcode": barcode,
         "name": name,
         "price": price,
         "stock": stock,
         "image": image_path,
+        "image_data": image_data,
+        "image_mime": image_mime,
     }
     update_product(product)
     flash("商品已保存", "success")
@@ -1140,6 +1229,7 @@ def api_checkout():
             "qty": qty,
             "subtotal": subtotal,
             "image": product.image,
+            "image_url": f"/product-image/{product.barcode}" if (product.image_data or product.image) else None,
         })
 
     total = round(total)
@@ -1169,7 +1259,7 @@ def api_checkout():
         ))
     db.session.commit()
     save_customer_display(display_payload(
-        [{key: item[key] for key in ("barcode", "name", "price", "qty", "subtotal", "image")} for item in checkout_items],
+        [{key: item[key] for key in ("barcode", "name", "price", "qty", "subtotal", "image", "image_url")} for item in checkout_items],
         payable,
         "paid",
         checkout_id=sale.id,

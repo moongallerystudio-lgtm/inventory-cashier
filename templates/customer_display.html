@@ -167,6 +167,7 @@
           qty: item.qty,
           subtotal: item.subtotal,
           image: item.image || '',
+          image_url: item.image_url || '',
         })),
       });
       if (payloadKey === lastPayloadKey) return;
@@ -199,11 +200,11 @@
 
       for (const item of items) {
         const row = document.createElement('tr');
-        const imageSrc = item.image ? `/static/${escapeHtml(item.image)}` : '/static/logo.jpg';
+        const imageSrc = item.image_url || '/static/logo.jpg';
         row.innerHTML = `
           <td>
             <div class="item-cell">
-              <img class="item-image" src="${imageSrc}" alt="">
+              <img class="item-image" src="${escapeHtml(imageSrc)}" alt="" onerror="this.onerror=null;this.src='/static/logo.jpg';">
               <span class="item-name">${escapeHtml(item.name)}</span>
             </div>
           </td>
