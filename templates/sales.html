@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang() }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ t('sales') }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8Xedv6gH6p9YxQpggD3Elo+urV7rV4p5A2aYW+Lmzl0QWvssQeCNSi82im5UwG2bKrw0P5VxE5QxQ3s6g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f7fa; color: #1f2937; margin: 0; padding: 18px; }
+    .page { max-width: 1180px; margin: 0 auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    h1, h2 { margin: 0; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; }
+    .panel { background: #fff; border: 1px solid #dde5ee; border-radius: 8px; padding: 16px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.06); margin-bottom: 16px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; text-decoration: none; color: #fff; background: #2563eb; border: none; cursor: pointer; font-weight: 700; font-size: 15px; white-space: nowrap; }
+    .button.gray { background: #475569; }
+    .button.green { background: #16a34a; }
+    .language-switch { display: flex; gap: 8px; flex-wrap: wrap; }
+    .lang-link { padding: 8px 10px; border-radius: 8px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #2563eb; color: #fff; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    input[type=date] { min-height: 44px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .summary-box { background: #f8fafc; border: 1px solid #dde5ee; border-radius: 8px; padding: 12px; }
+    .summary-label { color: #64748b; font-size: 14px; }
+    .summary-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
+    .table-wrap { overflow-x: auto; border: 1px solid #dde5ee; border-radius: 8px; margin-top: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; color: #334155; font-size: 14px; }
+    tr:last-child td { border-bottom: none; }
+    .muted { color: #64748b; }
+    @media (max-width: 760px) {
+      body { padding: 12px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toolbar, .button { width: 100%; }
+      input[type=date] { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <h1>{{ t('sales') }}</h1>
+      <div class="toolbar">
+        {{ language_switch() }}
+        <a class="button gray" href="/">{{ t('home') }}</a>
+        <a class="button" href="/cashier">{{ t('cashier') }}</a>
+      </div>
+    </div>
+
+    <div class="panel">
+      <form class="toolbar" method="get" action="/sales">
+        <input type="date" name="date" value="{{ report_date }}">
+        <button class="button" type="submit">{{ t('view_date') }}</button>
+        <a class="button green" href="/sales/export/xlsx?date={{ report_date }}">{{ t('download_excel') }}</a>
+        <a class="button" href="/sales/export/csv?date={{ report_date }}">{{ t('download_csv') }}</a>
+      </form>
+    </div>
+
+    <div class="summary">
+      <div class="summary-box">
+        <div class="summary-label">{{ t('orders') }}</div>
+        <div class="summary-value">{{ summary.orders }}</div>
+      </div>
+      <div class="summary-box">
+        <div class="summary-label">{{ t('sold_items') }}</div>
+        <div class="summary-value">{{ summary.items }}</div>
+      </div>
+      <div class="summary-box">
+        <div class="summary-label">{{ t('original_total') }}</div>
+        <div class="summary-value">¥{{ '%.2f'|format(summary.total) }}</div>
+      </div>
+      <div class="summary-box">
+        <div class="summary-label">{{ t('paid_amount') }}</div>
+        <div class="summary-value">¥{{ '%.2f'|format(summary.payable) }}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>{{ report_date }} {{ t('details') }}</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{{ t('sales_order') }}</th>
+              <th>{{ t('time') }}</th>
+              <th>{{ t('payment_method') }}</th>
+              <th>{{ t('member') }}</th>
+              <th>{{ t('product') }}</th>
+              <th>{{ t('price') }}</th>
+              <th>{{ t('qty') }}</th>
+              <th>{{ t('subtotal') }}</th>
+              <th>{{ t('paid_amount') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>#{{ row.sale_id }}</td>
+                <td>{{ row.created_at }}</td>
+                <td>{{ row.payment_method }}</td>
+                <td>
+                  {% if row.member_name %}
+                    {{ row.member_name }}<br>
+                    <span class="muted">{{ row.member_id }} / {{ row.discount }}%</span>
+                  {% else %}
+                    <span class="muted">{{ t('none') }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ row.name }}<br>
+                  <span class="muted">{{ row.barcode }}</span>
+                </td>
+                <td>¥{{ '%.2f'|format(row.price) }}</td>
+                <td>{{ row.qty }}</td>
+                <td>¥{{ '%.2f'|format(row.subtotal) }}</td>
+                <td>¥{{ '%.2f'|format(row.order_payable) }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="9">{{ t('no_sales') }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,14 +1,16 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, or_, text
 from werkzeug.utils import secure_filename
 from pathlib import Path
 import csv
 import io
 import json
 import socket
-from datetime import datetime
+from datetime import datetime, time
 import openpyxl
+from markupsafe import Markup
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-for-production")
@@ -28,6 +30,275 @@ app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+
+LANGUAGES = {
+    "zh": "中文",
+    "en": "English",
+    "ja": "日本語",
+}
+
+TRANSLATIONS = {
+    "zh": {
+        "app_name": "库存管理与收银系统",
+        "home": "返回首页",
+        "inventory": "库存管理",
+        "cashier": "收银结账",
+        "members": "会员管理",
+        "sales": "销售记录",
+        "scan": "扫码",
+        "start_scan": "开始扫码",
+        "stop_scan": "停止扫码",
+        "add": "加入",
+        "save": "保存",
+        "delete": "删除",
+        "remove": "移除",
+        "checkout": "结账",
+        "print_receipt": "打印小票",
+        "cancel_cart": "取消购物车",
+        "barcode": "条形码",
+        "product": "商品",
+        "product_name": "商品名称",
+        "image": "图片",
+        "price": "单价",
+        "stock": "库存",
+        "qty": "数量",
+        "subtotal": "小计",
+        "action": "操作",
+        "original_total": "原总价",
+        "payable": "折后价",
+        "paid_amount": "实收金额",
+        "payment_method": "付款方式",
+        "cash": "现金",
+        "card": "刷卡",
+        "mobile_pay": "移动支付",
+        "other": "其他",
+        "barcode_entry": "扫码 / 输入条码",
+        "barcode_placeholder": "扫码或输入条形码",
+        "product_search": "商品搜索",
+        "product_search_placeholder": "搜索商品名称或条码",
+        "search": "搜索",
+        "tap_product_hint": "可直接点选商品加入购物车。",
+        "member_discount": "会员折扣",
+        "member_id": "会员卡号",
+        "verify": "验证",
+        "clear": "清除",
+        "no_member_discount": "当前未应用会员折扣。",
+        "cart": "购物车",
+        "empty_cart": "购物车为空",
+        "stock_after_checkout": "结账后库存将自动减少。",
+        "sales_order": "销售单",
+        "time": "时间",
+        "member": "会员",
+        "orders": "订单数",
+        "sold_items": "销售件数",
+        "details": "明细",
+        "view_date": "查看日期",
+        "download_excel": "下载 Excel",
+        "download_csv": "下载 CSV",
+        "no_sales": "当天暂无销售记录",
+        "new_member": "新增会员",
+        "member_list": "会员列表",
+        "member_name": "会员姓名",
+        "discount": "折扣(%)",
+        "save_member": "保存会员",
+        "no_members": "暂无会员",
+        "edit_product": "录入/修改商品",
+        "save_product": "保存商品",
+        "import_export": "导入 / 导出",
+        "import_export_hint": "上传 CSV 或 Excel 文件后，系统会将商品信息导入当前库存；导出将生成带商品信息的文件。",
+        "choose_file": "选择文件",
+        "import_inventory": "导入库存",
+        "export_csv": "导出 CSV",
+        "export_excel": "导出 Excel",
+        "current_inventory": "当前库存",
+        "no_products": "暂无商品，请先录入",
+        "scanner": "扫码器",
+        "home_intro": "这是一个简单的库存管理与POS收银系统。你可以：",
+        "home_feature_inventory": "在库存管理页面录入、修改或删除商品",
+        "home_feature_cashier": "在收银页面扫码或输入条形码，实时显示商品信息、单价和总价",
+        "home_feature_stock": "结账后自动更新库存",
+        "lan_hint": "如果你希望用手机扫码，请在同一局域网下用手机浏览器访问：",
+        "lan_help": "如果打不开，请确认电脑和手机在同一 Wi-Fi、端口未被防火墙阻断。",
+        "none": "无",
+        "no_image": "无图",
+    },
+    "en": {
+        "app_name": "Inventory POS System",
+        "home": "Home",
+        "inventory": "Inventory",
+        "cashier": "Cashier",
+        "members": "Members",
+        "sales": "Sales Records",
+        "scan": "Scan",
+        "start_scan": "Start Scan",
+        "stop_scan": "Stop Scan",
+        "add": "Add",
+        "save": "Save",
+        "delete": "Delete",
+        "remove": "Remove",
+        "checkout": "Checkout",
+        "print_receipt": "Print Receipt",
+        "cancel_cart": "Cancel Cart",
+        "barcode": "Barcode",
+        "product": "Product",
+        "product_name": "Product Name",
+        "image": "Image",
+        "price": "Price",
+        "stock": "Stock",
+        "qty": "Qty",
+        "subtotal": "Subtotal",
+        "action": "Action",
+        "original_total": "Original Total",
+        "payable": "Payable",
+        "paid_amount": "Paid Amount",
+        "payment_method": "Payment Method",
+        "cash": "Cash",
+        "card": "Card",
+        "mobile_pay": "Mobile Pay",
+        "other": "Other",
+        "barcode_entry": "Scan / Enter Barcode",
+        "barcode_placeholder": "Scan or enter barcode",
+        "product_search": "Product Search",
+        "product_search_placeholder": "Search name or barcode",
+        "search": "Search",
+        "tap_product_hint": "Tap a product to add it to the cart.",
+        "member_discount": "Member Discount",
+        "member_id": "Member ID",
+        "verify": "Verify",
+        "clear": "Clear",
+        "no_member_discount": "No member discount applied.",
+        "cart": "Cart",
+        "empty_cart": "Cart is empty",
+        "stock_after_checkout": "Stock will be reduced after checkout.",
+        "sales_order": "Sale",
+        "time": "Time",
+        "member": "Member",
+        "orders": "Orders",
+        "sold_items": "Items Sold",
+        "details": "Details",
+        "view_date": "View Date",
+        "download_excel": "Download Excel",
+        "download_csv": "Download CSV",
+        "no_sales": "No sales records for this date",
+        "new_member": "New Member",
+        "member_list": "Member List",
+        "member_name": "Member Name",
+        "discount": "Discount (%)",
+        "save_member": "Save Member",
+        "no_members": "No members",
+        "edit_product": "Add / Edit Product",
+        "save_product": "Save Product",
+        "import_export": "Import / Export",
+        "import_export_hint": "Upload a CSV or Excel file to import products; export will download product data.",
+        "choose_file": "Choose File",
+        "import_inventory": "Import Inventory",
+        "export_csv": "Export CSV",
+        "export_excel": "Export Excel",
+        "current_inventory": "Current Inventory",
+        "no_products": "No products yet",
+        "scanner": "Scanner",
+        "home_intro": "A simple inventory and POS cashier system. You can:",
+        "home_feature_inventory": "Add, edit, or delete products in inventory",
+        "home_feature_cashier": "Scan or enter barcodes at checkout and see prices in real time",
+        "home_feature_stock": "Automatically update stock after checkout",
+        "lan_hint": "For mobile scanning on the same Wi-Fi, open:",
+        "lan_help": "If it does not open, check Wi-Fi and firewall settings.",
+        "none": "None",
+        "no_image": "No Image",
+    },
+    "ja": {
+        "app_name": "在庫管理・レジシステム",
+        "home": "ホーム",
+        "inventory": "在庫管理",
+        "cashier": "レジ会計",
+        "members": "会員管理",
+        "sales": "売上記録",
+        "scan": "スキャン",
+        "start_scan": "スキャン開始",
+        "stop_scan": "スキャン停止",
+        "add": "追加",
+        "save": "保存",
+        "delete": "削除",
+        "remove": "削除",
+        "checkout": "会計",
+        "print_receipt": "レシート印刷",
+        "cancel_cart": "カート取消",
+        "barcode": "バーコード",
+        "product": "商品",
+        "product_name": "商品名",
+        "image": "画像",
+        "price": "単価",
+        "stock": "在庫",
+        "qty": "数量",
+        "subtotal": "小計",
+        "action": "操作",
+        "original_total": "元合計",
+        "payable": "割引後",
+        "paid_amount": "支払額",
+        "payment_method": "支払方法",
+        "cash": "現金",
+        "card": "カード",
+        "mobile_pay": "モバイル決済",
+        "other": "その他",
+        "barcode_entry": "スキャン / バーコード入力",
+        "barcode_placeholder": "バーコードをスキャンまたは入力",
+        "product_search": "商品検索",
+        "product_search_placeholder": "商品名またはバーコードを検索",
+        "search": "検索",
+        "tap_product_hint": "商品をタップしてカートに追加できます。",
+        "member_discount": "会員割引",
+        "member_id": "会員番号",
+        "verify": "確認",
+        "clear": "クリア",
+        "no_member_discount": "会員割引は適用されていません。",
+        "cart": "カート",
+        "empty_cart": "カートは空です",
+        "stock_after_checkout": "会計後に在庫が自動で減ります。",
+        "sales_order": "売上",
+        "time": "時間",
+        "member": "会員",
+        "orders": "注文数",
+        "sold_items": "販売数",
+        "details": "明細",
+        "view_date": "日付表示",
+        "download_excel": "Excel ダウンロード",
+        "download_csv": "CSV ダウンロード",
+        "no_sales": "この日の売上記録はありません",
+        "new_member": "新規会員",
+        "member_list": "会員一覧",
+        "member_name": "会員名",
+        "discount": "割引(%)",
+        "save_member": "会員保存",
+        "no_members": "会員はありません",
+        "edit_product": "商品登録 / 編集",
+        "save_product": "商品保存",
+        "import_export": "インポート / エクスポート",
+        "import_export_hint": "CSV または Excel をアップロードして商品を取り込み、商品データを出力できます。",
+        "choose_file": "ファイル選択",
+        "import_inventory": "在庫インポート",
+        "export_csv": "CSV 出力",
+        "export_excel": "Excel 出力",
+        "current_inventory": "現在の在庫",
+        "no_products": "商品がありません",
+        "scanner": "スキャナー",
+        "home_intro": "シンプルな在庫管理・POS レジシステムです。できること：",
+        "home_feature_inventory": "在庫管理で商品の登録・編集・削除",
+        "home_feature_cashier": "レジでバーコードをスキャンまたは入力し、価格をリアルタイム表示",
+        "home_feature_stock": "会計後に在庫を自動更新",
+        "lan_hint": "同じ Wi-Fi のスマホでスキャンする場合はこちら：",
+        "lan_help": "開けない場合は Wi-Fi とファイアウォールを確認してください。",
+        "none": "なし",
+        "no_image": "画像なし",
+    },
+}
+
+PAYMENT_METHOD_KEYS = {
+    "现金": "cash",
+    "刷卡": "card",
+    "移动支付": "mobile_pay",
+    "其他": "other",
+    "未记录": "none",
+}
 
 class Product(db.Model):
     __tablename__ = "products"
@@ -60,13 +331,88 @@ class Member(db.Model):
         }
 
 
+class Sale(db.Model):
+    __tablename__ = "sales"
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    member_id = db.Column(db.String(128), nullable=True)
+    member_name = db.Column(db.String(256), nullable=True)
+    discount = db.Column(db.Integer, nullable=False, default=0)
+    payment_method = db.Column(db.String(64), nullable=False, default="未记录")
+    total = db.Column(db.Float, nullable=False, default=0.0)
+    payable = db.Column(db.Float, nullable=False, default=0.0)
+    items = db.relationship("SaleItem", backref="sale", cascade="all, delete-orphan", lazy=True)
+
+
+class SaleItem(db.Model):
+    __tablename__ = "sale_items"
+    id = db.Column(db.Integer, primary_key=True)
+    sale_id = db.Column(db.Integer, db.ForeignKey("sales.id"), nullable=False)
+    barcode = db.Column(db.String(128), nullable=False)
+    name = db.Column(db.String(256), nullable=False)
+    price = db.Column(db.Float, nullable=False, default=0.0)
+    qty = db.Column(db.Integer, nullable=False, default=0)
+    subtotal = db.Column(db.Float, nullable=False, default=0.0)
+
+
 def ensure_directories():
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_schema():
+    inspector = inspect(db.engine)
+    if "sales" not in inspector.get_table_names():
+        return
+    sale_columns = {column["name"] for column in inspector.get_columns("sales")}
+    if "payment_method" not in sale_columns:
+        db.session.execute(text("ALTER TABLE sales ADD COLUMN payment_method VARCHAR(64) NOT NULL DEFAULT '未记录'"))
+        db.session.commit()
 
 
 with app.app_context():
     ensure_directories()
     db.create_all()
+    ensure_schema()
+
+
+def get_language():
+    lang = session.get("lang", "zh")
+    return lang if lang in LANGUAGES else "zh"
+
+
+def translate(key):
+    lang = get_language()
+    return TRANSLATIONS.get(lang, TRANSLATIONS["zh"]).get(key, TRANSLATIONS["zh"].get(key, key))
+
+
+def language_switch():
+    current = get_language()
+    back = request.full_path if request.query_string else request.path
+    links = []
+    for code, label in LANGUAGES.items():
+        active = " active" if code == current else ""
+        href = url_for("set_language", lang=code, next=back)
+        links.append(f'<a class="lang-link{active}" href="{href}">{label}</a>')
+    return Markup('<div class="language-switch">' + "".join(links) + "</div>")
+
+
+@app.context_processor
+def inject_language_tools():
+    return {
+        "t": translate,
+        "current_lang": get_language,
+        "language_switch": language_switch,
+    }
+
+
+@app.route("/language/<lang>")
+def set_language(lang):
+    if lang in LANGUAGES:
+        session["lang"] = lang
+    target = request.args.get("next") or url_for("index")
+    if not target.startswith("/"):
+        target = url_for("index")
+    return redirect(target)
 
 
 def load_inventory():
@@ -209,6 +555,72 @@ def cart_items():
     return items, total
 
 
+def cart_payload():
+    items, total = cart_items()
+    return {
+        "items": items,
+        "total": round(total, 2),
+    }
+
+
+def calculate_payable(total, member):
+    discount = member.discount if member else 0
+    return round(total * (1 - discount / 100), 2)
+
+
+def normalize_payment_method(value):
+    allowed_methods = {"现金", "刷卡", "移动支付", "其他"}
+    method = str(value or "").strip()
+    return method if method in allowed_methods else "其他"
+
+
+def payment_method_label(value):
+    key = PAYMENT_METHOD_KEYS.get(value)
+    return translate(key) if key else (value or translate("none"))
+
+
+def parse_report_date(value):
+    if value:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    return datetime.now().date()
+
+
+def sales_for_date(report_date):
+    start = datetime.combine(report_date, time.min)
+    end = datetime.combine(report_date, time.max)
+    return (
+        Sale.query
+        .filter(Sale.created_at >= start, Sale.created_at <= end)
+        .order_by(Sale.created_at.desc(), Sale.id.desc())
+        .all()
+    )
+
+
+def sale_rows(sales):
+    rows = []
+    for sale in sales:
+        for item in sale.items:
+            rows.append({
+                "sale_id": sale.id,
+                "created_at": sale.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "member_id": sale.member_id or "",
+                "member_name": sale.member_name or "",
+                "discount": sale.discount,
+                "payment_method": payment_method_label(sale.payment_method or "未记录"),
+                "barcode": item.barcode,
+                "name": item.name,
+                "price": item.price,
+                "qty": item.qty,
+                "subtotal": item.subtotal,
+                "order_total": sale.total,
+                "order_payable": sale.payable,
+            })
+    return rows
+
+
 def parse_inventory_file(file_storage):
     filename = file_storage.filename or ""
     suffix = Path(filename).suffix.lower()
@@ -282,9 +694,12 @@ def manage_add():
     except ValueError:
         flash("价格必须是数字，库存必须是整数", "error")
         return redirect(url_for("manage"))
+    if price < 0 or stock < 0:
+        flash("价格和库存不能为负数", "error")
+        return redirect(url_for("manage"))
 
-    existing = find_product(barcode) or {}
-    image_path = existing.get("image")
+    existing = find_product(barcode)
+    image_path = existing.image if existing else None
     uploaded_image = save_image_file(image_file, barcode)
     if uploaded_image:
         image_path = uploaded_image
@@ -399,6 +814,9 @@ def members_add():
     except ValueError:
         flash("折扣必须是整数", "error")
         return redirect(url_for("members"))
+    if discount < 0 or discount > 100:
+        flash("折扣必须在 0 到 100 之间", "error")
+        return redirect(url_for("members"))
     member = {"member_id": member_id, "name": name, "discount": discount}
     update_member(member)
     flash("会员已保存", "success")
@@ -429,12 +847,95 @@ def cashier():
     return render_template("cashier.html", items=items, total=total)
 
 
+@app.route("/sales")
+def sales():
+    report_date = parse_report_date(request.args.get("date", ""))
+    sales = sales_for_date(report_date)
+    rows = sale_rows(sales)
+    summary = {
+        "orders": len(sales),
+        "items": sum(row["qty"] for row in rows),
+        "total": round(sum(sale.total for sale in sales), 2),
+        "payable": round(sum(sale.payable for sale in sales), 2),
+    }
+    return render_template(
+        "sales.html",
+        sales=sales,
+        rows=rows,
+        summary=summary,
+        report_date=report_date.strftime("%Y-%m-%d"),
+    )
+
+
+@app.route("/sales/export/<fmt>")
+def sales_export(fmt):
+    report_date = parse_report_date(request.args.get("date", ""))
+    sales = sales_for_date(report_date)
+    rows = sale_rows(sales)
+    headers = [
+        "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
+        "barcode", "name", "price", "qty", "subtotal", "order_total", "order_payable",
+    ]
+    filename_date = report_date.strftime("%Y%m%d")
+
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+        data = output.getvalue().encode("utf-8-sig")
+        return send_file(
+            io.BytesIO(data),
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=f"sales-{filename_date}.csv",
+        )
+
+    if fmt == "xlsx":
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Sales"
+        sheet.append(headers)
+        for row in rows:
+            sheet.append([row.get(header, "") for header in headers])
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=f"sales-{filename_date}.xlsx",
+        )
+
+    flash("不支持的导出格式", "error")
+    return redirect(url_for("sales", date=report_date.strftime("%Y-%m-%d")))
+
+
 @app.route("/api/product/<barcode>")
 def api_product(barcode):
     product = find_product(barcode)
     if product:
         return jsonify({"found": True, "product": product.to_dict()})
     return jsonify({"found": False}), 404
+
+
+@app.route("/api/products/search")
+def api_products_search():
+    keyword = request.args.get("q", "").strip()
+    query = Product.query
+    if keyword:
+        pattern = f"%{keyword}%"
+        query = query.filter(
+            or_(
+                Product.name.ilike(pattern),
+                Product.barcode.ilike(pattern),
+            )
+        )
+    products = query.order_by(Product.name).limit(24).all()
+    return jsonify({
+        "products": [product.to_dict() for product in products],
+    })
 
 
 @app.route("/api/cashier/scan", methods=["POST"])
@@ -454,7 +955,6 @@ def api_cashier_scan():
 
     cart[barcode] = qty
     save_cart(cart)
-    items, total = cart_items()
     return jsonify({
         "product": {
             "barcode": product.barcode,
@@ -464,31 +964,109 @@ def api_cashier_scan():
             "qty": qty,
             "image": product.image,
         },
-        "cart": {
-            "items": items,
-            "total": round(total, 2),
-        },
+        "cart": cart_payload(),
     })
+
+
+@app.route("/api/cashier/cart/<barcode>", methods=["PATCH"])
+def api_update_cart_item(barcode):
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        qty = int(data.get("qty", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "数量必须是整数"}), 400
+
+    cart = get_cart()
+    if barcode not in cart:
+        return jsonify({"error": "购物车中没有该商品"}), 404
+
+    if qty <= 0:
+        cart.pop(barcode, None)
+        save_cart(cart)
+        return jsonify({"success": True, "cart": cart_payload()})
+
+    product = find_product(barcode)
+    if not product:
+        cart.pop(barcode, None)
+        save_cart(cart)
+        return jsonify({"error": "商品不存在，已从购物车移除", "cart": cart_payload()}), 404
+
+    if qty > product.stock:
+        return jsonify({"error": f"库存不足，当前库存 {product.stock}"}), 400
+
+    cart[barcode] = qty
+    save_cart(cart)
+    return jsonify({"success": True, "cart": cart_payload()})
+
+
+@app.route("/api/cashier/cart/<barcode>", methods=["DELETE"])
+def api_delete_cart_item(barcode):
+    cart = get_cart()
+    cart.pop(barcode, None)
+    save_cart(cart)
+    return jsonify({"success": True, "cart": cart_payload()})
 
 
 @app.route("/api/cashier/checkout", methods=["POST"])
 def api_checkout():
     data = request.get_json(force=True, silent=True) or {}
     member_id = str(data.get("member_id", "")).strip()
+    payment_method = normalize_payment_method(data.get("payment_method", "移动支付"))
     member = find_member(member_id) if member_id else None
     cart = get_cart()
     if not cart:
         return jsonify({"error": "购物车为空"}), 400
+
+    checkout_items = []
+    total = 0.0
     for barcode, qty in cart.items():
         product = find_product(barcode)
-        if product:
-            product.stock = max(0, product.stock - qty)
+        if not product:
+            return jsonify({"error": f"商品 {barcode} 不存在，请先移出购物车"}), 400
+        if qty > product.stock:
+            return jsonify({"error": f"{product.name} 库存不足，当前库存 {product.stock}"}), 400
+        subtotal = round(product.price * qty, 2)
+        total += subtotal
+        checkout_items.append({
+            "product": product,
+            "barcode": product.barcode,
+            "name": product.name,
+            "price": product.price,
+            "qty": qty,
+            "subtotal": subtotal,
+        })
+
+    total = round(total, 2)
+    payable = calculate_payable(total, member)
+    sale = Sale(
+        created_at=datetime.now(),
+        member_id=member.member_id if member else None,
+        member_name=member.name if member else None,
+        discount=member.discount if member else 0,
+        payment_method=payment_method,
+        total=total,
+        payable=payable,
+    )
+    db.session.add(sale)
+
+    for item in checkout_items:
+        product = item["product"]
+        qty = item["qty"]
+        product.stock -= qty
+        db.session.add(SaleItem(
+            sale=sale,
+            barcode=item["barcode"],
+            name=item["name"],
+            price=item["price"],
+            qty=qty,
+            subtotal=item["subtotal"],
+        ))
     db.session.commit()
     session["cart"] = {}
-    message = "结账完成，库存已更新"
+    message = f"结账完成，已记录销售单 #{sale.id}（{payment_method}）"
     if member:
         message += f"（{member.name} 享受 {member.discount}% 折扣）"
-    return jsonify({"success": True, "message": message})
+    return jsonify({"success": True, "message": message, "sale_id": sale.id})
 
 
 @app.route("/api/cashier/cancel", methods=["POST"])

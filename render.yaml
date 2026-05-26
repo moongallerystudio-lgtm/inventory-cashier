@@ -1,18 +1,21 @@
 services:
   - type: web
     name: inventory-cashier-web
-    env: docker
+    runtime: docker
     plan: free
     dockerfilePath: Dockerfile
     autoDeploy: true
     envVars:
       - key: SECRET_KEY
-        value: "change-this-secret-for-production"
+        generateValue: true
       - key: DATABASE_URL
-        fromDatabase: inventory-cashier-db
+        fromDatabase:
+          name: inventory-cashier-db
+          property: connectionString
 
-  - type: postgres
-    name: inventory-cashier-db
-    plan: starter
+databases:
+  - name: inventory-cashier-db
+    plan: basic-256mb
     databaseName: inventory_cashier
+    user: inventory_cashier
     postgresVersion: "15"

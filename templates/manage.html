@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ current_lang() }}">
 <head>
   <meta charset="UTF-8" />
-  <title>库存管理</title>
+  <title>{{ t('inventory') }}</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8Xedv6gH6p9YxQpggD3Elo+urV7rV4p5A2aYW+Lmzl0QWvssQeCNSi82im5UwG2bKrw0P5VxE5QxQ3s6g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
     body { font-family: Arial, sans-serif; background: #f3f7fb; padding: 20px; }
@@ -19,6 +19,9 @@
     .alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; }
     .alert.error { background: #ffe2e6; color: #9a161b; }
     .alert.success { background: #e7f8ed; color: #1f6b2f; }
+    .language-switch { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .lang-link { padding: 6px 10px; border-radius: 6px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #007BFF; color: #fff; }
     #videoWrapper { display: none; margin-top: 12px; }
     video { width: 100%; max-height: 280px; border-radius: 10px; }
   </style>
@@ -26,10 +29,11 @@
 <body>
   <div class="page">
     <div class="card">
-      <h1>库存管理</h1>
+      {{ language_switch() }}
+      <h1>{{ t('inventory') }}</h1>
       <p>
-        <a class="button" href="/">返回首页</a>
-        <button type="button" class="button green" onclick="startScan('barcode')">开始扫码</button>
+        <a class="button" href="/">{{ t('home') }}</a>
+        <button type="button" class="button green" onclick="startScan('barcode')">{{ t('start_scan') }}</button>
       </p>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -39,39 +43,39 @@
         {% endif %}
       {% endwith %}
       <div class="card">
-        <h2>录入/修改商品</h2>
+        <h2>{{ t('edit_product') }}</h2>
         <form method="post" action="/manage/add" enctype="multipart/form-data">
           <div class="form-row">
-            <label>条形码<input type="text" name="barcode" id="barcode" placeholder="例如 6901234567890" required></label>
-            <label>商品名称<input type="text" name="name" placeholder="如 牙膏" required></label>
-            <label>单价<input type="number" name="price" step="0.01" placeholder="如 12.50" required></label>
-            <label>库存<input type="number" name="stock" step="1" placeholder="如 100" required></label>
+            <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" required></label>
+            <label>{{ t('product_name') }}<input type="text" name="name" placeholder="{{ t('product_name') }}" required></label>
+            <label>{{ t('price') }}<input type="number" name="price" step="0.01" placeholder="12.50" required></label>
+            <label>{{ t('stock') }}<input type="number" name="stock" step="1" placeholder="100" required></label>
           </div>
           <div class="form-row">
-            <label>商品图片<input type="file" name="image" accept="image/*"></label>
+            <label>{{ t('image') }}<input type="file" name="image" accept="image/*"></label>
           </div>
-          <button class="button" type="submit">保存商品</button>
+          <button class="button" type="submit">{{ t('save_product') }}</button>
         </form>
       </div>
       <div class="card">
-        <h2>导入 / 导出</h2>
-        <p>上传 CSV 或 Excel 文件后，系统会将商品信息导入当前库存；导出将生成带商品信息的文件。</p>
+        <h2>{{ t('import_export') }}</h2>
+        <p>{{ t('import_export_hint') }}</p>
         <form method="post" action="/manage/import" enctype="multipart/form-data" style="margin-bottom: 16px;">
           <div class="form-row">
-            <label>选择文件<input type="file" name="inventory_file" accept=".csv,.xlsx"></label>
-            <button class="button" type="submit">导入库存</button>
+            <label>{{ t('choose_file') }}<input type="file" name="inventory_file" accept=".csv,.xlsx"></label>
+            <button class="button" type="submit">{{ t('import_inventory') }}</button>
           </div>
         </form>
         <p>
-          <a class="button" href="/manage/export/csv">导出 CSV</a>
-          <a class="button" href="/manage/export/xlsx">导出 Excel</a>
+          <a class="button" href="/manage/export/csv">{{ t('export_csv') }}</a>
+          <a class="button" href="/manage/export/xlsx">{{ t('export_excel') }}</a>
         </p>
       </div>
       <div class="card">
-        <h2>当前库存</h2>
+        <h2>{{ t('current_inventory') }}</h2>
         <table>
           <thead>
-            <tr><th>条形码</th><th>商品</th><th>图片</th><th>单价</th><th>库存</th><th>操作</th></tr>
+            <tr><th>{{ t('barcode') }}</th><th>{{ t('product') }}</th><th>{{ t('image') }}</th><th>{{ t('price') }}</th><th>{{ t('stock') }}</th><th>{{ t('action') }}</th></tr>
           </thead>
           <tbody>
             {% for product in inventory %}
@@ -83,21 +87,21 @@
                 <td>{{ product.stock }}</td>
                 <td>
                   <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm('确认删除？');">
-                    <button class="button red" type="submit">删除</button>
+                    <button class="button red" type="submit">{{ t('delete') }}</button>
                   </form>
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="5">暂无商品，请先录入</td></tr>
+              <tr><td colspan="6">{{ t('no_products') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
       <div id="videoWrapper" class="card">
-        <h2>扫码器</h2>
+        <h2>{{ t('scanner') }}</h2>
         <video id="scanVideo" playsinline muted></video>
         <div style="margin-top:12px;">
-          <button type="button" class="button red" onclick="stopScan()">停止扫码</button>
+          <button type="button" class="button red" onclick="stopScan()">{{ t('stop_scan') }}</button>
         </div>
       </div>
     </div>

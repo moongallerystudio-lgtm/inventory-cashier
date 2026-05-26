@@ -1,89 +1,223 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ current_lang() }}">
 <head>
   <meta charset="UTF-8" />
-  <title>收银系统</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ t('cashier') }}</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8Xedv6gH6p9YxQpggD3Elo+urV7rV4p5A2aYW+Lmzl0QWvssQeCNSi82im5UwG2bKrw0P5VxE5QxQ3s6g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
-    body { font-family: Arial, sans-serif; background: #eef3f8; padding: 20px; }
-    .page { max-width: 1000px; margin: auto; }
-    .card { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
-    .button { display: inline-block; padding: 12px 18px; border-radius: 6px; text-decoration: none; color: #fff; background: #007bff; margin-right: 10px; border: none; cursor: pointer; }
-    .button.red { background: #dc3545; }
-    .button.green { background: #28a745; }
-    .form-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; margin-bottom: 16px; }
-    input[type=text] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-    th { background: #f0f4f8; }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body { font-family: Arial, sans-serif; background: #f5f7fa; color: #1f2937; margin: 0; }
+    .page { min-height: 100vh; padding: 18px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    h1, h2 { margin: 0; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; }
+    .layout { display: grid; grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr); gap: 16px; align-items: start; }
+    .panel { background: #fff; border: 1px solid #dde5ee; border-radius: 8px; padding: 16px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.06); }
+    .panel + .panel { margin-top: 16px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border-radius: 8px; text-decoration: none; color: #fff; background: #2563eb; border: none; cursor: pointer; font-weight: 700; font-size: 16px; white-space: nowrap; }
+    .button.small { min-height: 40px; min-width: 40px; padding: 0 12px; font-size: 18px; }
+    .button.red { background: #dc2626; }
+    .button.green { background: #16a34a; }
+    .button.gray { background: #475569; }
+    .button.checkout { min-height: 64px; font-size: 22px; }
+    .language-switch { display: flex; gap: 8px; flex-wrap: wrap; }
+    .lang-link { padding: 8px 10px; border-radius: 8px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #2563eb; color: #fff; }
+    .input-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin-top: 12px; }
+    .member-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin-top: 14px; }
+    input[type=text], input[type=search] { width: 100%; min-height: 52px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 18px; background: #fff; }
+    .notice { min-height: 24px; margin-top: 10px; color: #475569; font-size: 15px; }
+    .search-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .product-tile { min-height: 92px; padding: 12px; border: 1px solid #d7dee8; border-radius: 8px; background: #fff; text-align: left; cursor: pointer; display: grid; grid-template-columns: 58px 1fr; gap: 10px; align-items: center; }
+    .product-tile:disabled { opacity: 0.55; cursor: not-allowed; }
+    .product-thumb { width: 58px; height: 58px; border-radius: 8px; background: #eef2f7; object-fit: cover; }
+    .product-placeholder { display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 700; }
+    .product-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .product-meta { color: #475569; font-size: 14px; line-height: 1.35; }
     #videoWrapper { display: none; margin-top: 12px; }
-    video { width: 100%; max-height: 320px; border-radius: 10px; }
-    .summary { font-size: 1.1em; font-weight: 700; }
-    .notice { margin-top: 8px; color: #555; }
+    video { width: 100%; max-height: 360px; border-radius: 8px; background: #111827; }
+    .cart-panel { position: sticky; top: 18px; }
+    .cart-table-wrap { overflow-x: auto; margin-top: 12px; border: 1px solid #dde5ee; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; min-width: 620px; }
+    th, td { padding: 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: middle; }
+    th { background: #f1f5f9; color: #334155; font-size: 14px; }
+    tr:last-child td { border-bottom: none; }
+    .qty-cell { white-space: nowrap; }
+    .qty-value { display: inline-block; min-width: 34px; text-align: center; font-size: 18px; font-weight: 700; }
+    .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+    .total-box { background: #f8fafc; border: 1px solid #dde5ee; border-radius: 8px; padding: 12px; }
+    .total-label { color: #64748b; font-size: 14px; }
+    .total-value { font-size: 26px; font-weight: 800; margin-top: 4px; }
+    .payable .total-value { color: #16a34a; }
+    .payment-methods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .payment-option input { position: absolute; opacity: 0; pointer-events: none; }
+    .payment-option span { display: flex; align-items: center; justify-content: center; min-height: 50px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-weight: 700; cursor: pointer; }
+    .payment-option input:checked + span { background: #e8f5ee; border-color: #16a34a; color: #166534; box-shadow: inset 0 0 0 2px #16a34a; }
+    .actions { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; }
+    @media (max-width: 900px) {
+      .page { padding: 12px; }
+      .layout { grid-template-columns: 1fr; }
+      .cart-panel { position: static; }
+      .search-results { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .input-row, .member-row, .actions { grid-template-columns: 1fr; }
+      .button { width: 100%; }
+    }
   </style>
 </head>
 <body>
   <div class="page">
-    <div class="card">
-      <h1>收银系统</h1>
-      <p>
-        <a class="button" href="/">返回首页</a>
-      </p>
-      <div class="card">
-        <h2>扫码录入商品</h2>
-        <div class="form-row">
-          <input id="cashierBarcode" type="text" placeholder="请扫码或输入条形码" />
-          <button type="button" class="button green" onclick="startScan('cashierBarcode')">开始扫码</button>
-          <button type="button" class="button" onclick="scanCashierBarcode()">添加商品</button>
-        </div>
-        <div id="videoWrapper" style="display:none; margin-top:12px;">
-          <video id="scanVideo" playsinline muted></video>
-          <div style="margin-top:12px;">
-            <button type="button" class="button red" onclick="stopScan()">停止扫码</button>
-          </div>
-        </div>
-        <div class="form-row">
-          <input id="memberId" type="text" placeholder="输入会员卡号以获取折扣" />
-          <button class="button" onclick="verifyMember()">验证会员</button>
-          <button class="button" onclick="clearMember()">清除会员</button>
-        </div>
-        <p id="memberInfo" class="notice">当前未应用会员折扣。</p>
-        <div id="scanResult" class="notice"></div>
-        <p class="notice">打开摄像头后对准条形码即可扫描，识别成功后会自动填充条码。</p>
-      </div>
-      <div class="card">
-        <h2>购物车</h2>
-        <table>
-          <thead>
-            <tr><th>条形码</th><th>商品</th><th>单价</th><th>数量</th><th>小计</th></tr>
-          </thead>
-          <tbody id="cartBody">
-            {% if items %}
-              {% for item in items %}
-                <tr>
-                  <td>{{ item.barcode }}</td>
-                  <td>{{ item.name }}</td>
-                  <td>¥{{ '%.2f'|format(item.price) }}</td>
-                  <td>{{ item.qty }}</td>
-                  <td>¥{{ '%.2f'|format(item.subtotal) }}</td>
-                </tr>
-              {% endfor %}
-            {% else %}
-              <tr><td colspan="5">购物车为空</td></tr>
-            {% endif %}
-          </tbody>
-        </table>
-        <p class="summary">原总价：¥<span id="cartTotal">{{ '%.2f'|format(total) }}</span></p>
-        <p class="summary">折后价：¥<span id="cartPayable">{{ '%.2f'|format(total) }}</span></p>
-        <p>
-          <button class="button green" onclick="checkout()">结账</button>
-          <button class="button" onclick="printReceipt()">打印小票</button>
-          <button class="button red" onclick="cancelCart()">取消购物车</button>
-        </p>
-        <p class="notice">结账后库存将自动减少。</p>
+    <div class="topbar">
+      <h1>{{ t('cashier') }}</h1>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        {{ language_switch() }}
+        <a class="button" href="/sales">{{ t('sales') }}</a>
+        <a class="button gray" href="/">{{ t('home') }}</a>
       </div>
     </div>
+    <div class="layout">
+      <section>
+        <div class="panel">
+          <h2>{{ t('barcode_entry') }}</h2>
+          <div class="input-row">
+            <input id="cashierBarcode" type="text" inputmode="numeric" autocomplete="off" placeholder="{{ t('barcode_placeholder') }}" />
+            <button type="button" class="button green" onclick="startScan('cashierBarcode')">{{ t('scan') }}</button>
+            <button type="button" class="button" onclick="scanCashierBarcode()">{{ t('add') }}</button>
+          </div>
+          <div id="videoWrapper">
+            <video id="scanVideo" playsinline muted></video>
+            <div style="margin-top:12px;">
+              <button type="button" class="button red" onclick="stopScan()">{{ t('stop_scan') }}</button>
+            </div>
+          </div>
+          <div id="scanResult" class="notice"></div>
+        </div>
+
+        <div class="panel">
+          <h2>{{ t('product_search') }}</h2>
+          <div class="input-row" style="grid-template-columns: 1fr auto;">
+            <input id="productSearch" type="search" autocomplete="off" placeholder="{{ t('product_search_placeholder') }}" />
+            <button type="button" class="button" onclick="searchProducts()">{{ t('search') }}</button>
+          </div>
+          <div id="productResults" class="search-results"></div>
+          <div id="productSearchStatus" class="notice">{{ t('tap_product_hint') }}</div>
+        </div>
+
+        <div class="panel">
+          <h2>{{ t('member_discount') }}</h2>
+          <div class="member-row">
+            <input id="memberId" type="text" inputmode="numeric" autocomplete="off" placeholder="{{ t('member_id') }}" />
+            <button class="button" onclick="verifyMember()">{{ t('verify') }}</button>
+            <button class="button gray" onclick="clearMember()">{{ t('clear') }}</button>
+          </div>
+          <div id="memberInfo" class="notice">{{ t('no_member_discount') }}</div>
+        </div>
+      </section>
+
+      <section class="panel cart-panel">
+        <h2>{{ t('cart') }}</h2>
+        <div class="cart-table-wrap">
+          <table>
+            <thead>
+              <tr><th>{{ t('product') }}</th><th>{{ t('price') }}</th><th>{{ t('qty') }}</th><th>{{ t('subtotal') }}</th><th>{{ t('action') }}</th></tr>
+            </thead>
+            <tbody id="cartBody">
+              {% if items %}
+                {% for item in items %}
+                  <tr data-name="{{ item.name }}" data-price="{{ item.price }}" data-qty="{{ item.qty }}" data-subtotal="{{ item.subtotal }}">
+                    <td>
+                      <strong>{{ item.name }}</strong><br>
+                      <span class="product-meta">{{ item.barcode }}</span>
+                    </td>
+                    <td>¥{{ '%.2f'|format(item.price) }}</td>
+                    <td class="qty-cell">
+                      <button class="button small" type="button" onclick="changeCartQty({{ item.barcode|tojson }}, {{ item.qty - 1 }})">-</button>
+                      <span class="qty-value">{{ item.qty }}</span>
+                      <button class="button small" type="button" onclick="changeCartQty({{ item.barcode|tojson }}, {{ item.qty + 1 }})">+</button>
+                    </td>
+                    <td>¥{{ '%.2f'|format(item.subtotal) }}</td>
+                    <td><button class="button small red" type="button" onclick="removeCartItem({{ item.barcode|tojson }})">{{ t('remove') }}</button></td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="5">{{ t('empty_cart') }}</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        <div class="totals">
+          <div class="total-box">
+            <div class="total-label">{{ t('original_total') }}</div>
+            <div class="total-value">¥<span id="cartTotal">{{ '%.2f'|format(total) }}</span></div>
+          </div>
+          <div class="total-box payable">
+            <div class="total-label">{{ t('payable') }}</div>
+            <div class="total-value">¥<span id="cartPayable">{{ '%.2f'|format(total) }}</span></div>
+          </div>
+        </div>
+        <div class="payment-methods" aria-label="付款方式">
+          <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="现金">
+            <span>{{ t('cash') }}</span>
+          </label>
+          <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="刷卡">
+            <span>{{ t('card') }}</span>
+          </label>
+          <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="移动支付" checked>
+            <span>{{ t('mobile_pay') }}</span>
+          </label>
+          <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="其他">
+            <span>{{ t('other') }}</span>
+          </label>
+        </div>
+        <div class="actions">
+          <button class="button green checkout" onclick="checkout()">{{ t('checkout') }}</button>
+          <button class="button" onclick="printReceipt()">{{ t('print_receipt') }}</button>
+          <button class="button red" onclick="cancelCart()">{{ t('cancel_cart') }}</button>
+        </div>
+        <div class="notice">{{ t('stock_after_checkout') }}</div>
+      </section>
+    </div>
   </div>
+  <script>
+    window.APP_I18N = {
+      emptyCart: {{ t('empty_cart')|tojson }},
+      remove: {{ t('remove')|tojson }},
+      noImage: {{ t('no_image')|tojson }},
+      stock: {{ t('stock')|tojson }},
+      foundProducts: {
+        zh: "找到 {count} 个商品。",
+        en: "Found {count} products.",
+        ja: "{count} 件の商品が見つかりました。"
+      }[{{ current_lang()|tojson }}],
+      noProductsFound: {
+        zh: "没有找到匹配商品。",
+        en: "No matching products found.",
+        ja: "一致する商品がありません。"
+      }[{{ current_lang()|tojson }}],
+      searching: {
+        zh: "正在搜索...",
+        en: "Searching...",
+        ja: "検索中..."
+      }[{{ current_lang()|tojson }}],
+      cartUpdated: {
+        zh: "购物车已更新。",
+        en: "Cart updated.",
+        ja: "カートを更新しました。"
+      }[{{ current_lang()|tojson }}],
+      itemRemoved: {
+        zh: "已移除商品。",
+        en: "Item removed.",
+        ja: "商品を削除しました。"
+      }[{{ current_lang()|tojson }}]
+    };
+  </script>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
   <script src="/static/main.js"></script>
 </body>

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ current_lang() }}">
 <head>
   <meta charset="UTF-8" />
-  <title>会员管理</title>
+  <title>{{ t('members') }}</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8Xedv6gH6p9YxQpggD3Elo+urV7rV4p5A2aYW+Lmzl0QWvssQeCNSi82im5UwG2bKrw0P5VxE5QxQ3s6g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
     body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
@@ -19,15 +19,19 @@
     .alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; }
     .alert.error { background: #ffe2e6; color: #9a161b; }
     .alert.success { background: #e7f8ed; color: #1f6b2f; }
+    .language-switch { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .lang-link { padding: 6px 10px; border-radius: 6px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #007BFF; color: #fff; }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="card">
-      <h1>会员管理</h1>
+      {{ language_switch() }}
+      <h1>{{ t('members') }}</h1>
       <p>
-        <a class="button" href="/">返回首页</a>
-        <a class="button" href="/manage">库存管理</a>
+        <a class="button" href="/">{{ t('home') }}</a>
+        <a class="button" href="/manage">{{ t('inventory') }}</a>
       </p>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -37,21 +41,21 @@
         {% endif %}
       {% endwith %}
       <div class="card">
-        <h2>新增会员</h2>
+        <h2>{{ t('new_member') }}</h2>
         <form method="post" action="/members/add">
           <div class="form-row">
-            <label>会员卡号<input type="text" name="member_id" placeholder="例如 10001" required></label>
-            <label>会员姓名<input type="text" name="name" placeholder="例如 张三" required></label>
-            <label>折扣(%)<input type="number" name="discount" min="0" max="100" step="1" placeholder="例如 10" required></label>
+            <label>{{ t('member_id') }}<input type="text" name="member_id" placeholder="10001" required></label>
+            <label>{{ t('member_name') }}<input type="text" name="name" placeholder="{{ t('member_name') }}" required></label>
+            <label>{{ t('discount') }}<input type="number" name="discount" min="0" max="100" step="1" placeholder="10" required></label>
           </div>
-          <button class="button" type="submit">保存会员</button>
+          <button class="button" type="submit">{{ t('save_member') }}</button>
         </form>
       </div>
       <div class="card">
-        <h2>会员列表</h2>
+        <h2>{{ t('member_list') }}</h2>
         <table>
           <thead>
-            <tr><th>会员卡号</th><th>姓名</th><th>折扣(%)</th><th>操作</th></tr>
+            <tr><th>{{ t('member_id') }}</th><th>{{ t('member_name') }}</th><th>{{ t('discount') }}</th><th>{{ t('action') }}</th></tr>
           </thead>
           <tbody>
             {% for member in members %}
@@ -61,12 +65,12 @@
                 <td>{{ member.discount }}</td>
                 <td>
                   <form method="post" action="/members/delete/{{ member.member_id }}" style="display:inline;" onsubmit="return confirm('确认删除会员？');">
-                    <button class="button red" type="submit">删除</button>
+                    <button class="button red" type="submit">{{ t('delete') }}</button>
                   </form>
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="4">暂无会员</td></tr>
+              <tr><td colspan="4">{{ t('no_members') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

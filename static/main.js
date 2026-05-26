@@ -7,6 +7,15 @@ let currentMember = null;
 let lastImageDataUrl = null;
 let lastRotation = 0;
 
+function tr(key, fallback, params = {}) {
+  const dict = window.APP_I18N || {};
+  let text = dict[key] || fallback;
+  for (const [name, value] of Object.entries(params)) {
+    text = text.replace(`{${name}}`, value);
+  }
+  return text;
+}
+
 async function startScan(targetId) {
   currentScanTarget = targetId;
   const videoWrapper = document.getElementById('videoWrapper');
@@ -537,6 +546,19 @@ async function scanCashierBarcode() {
   barcodeInput.value = '';
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeJsString(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function updateCartTable(items, total) {
   const body = document.getElementById('cartBody');
   const totalEl = document.getElementById('cartTotal');
@@ -544,22 +566,126 @@ function updateCartTable(items, total) {
   body.innerHTML = '';
 
   if (!items || items.length === 0) {
-    body.innerHTML = '<tr><td colspan="5">购物车为空</td></tr>';
+    body.innerHTML = `<tr><td colspan="5">${escapeHtml(tr('emptyCart', '购物车为空'))}</td></tr>`;
   } else {
     for (const item of items) {
+      const rawBarcode = String(item.barcode);
+      const barcode = escapeHtml(rawBarcode);
+      const name = escapeHtml(item.name);
+      const barcodeArg = escapeJsString(rawBarcode);
       const row = document.createElement('tr');
+      row.dataset.name = item.name;
+      row.dataset.price = item.price;
+      row.dataset.qty = item.qty;
+      row.dataset.subtotal = item.subtotal;
       row.innerHTML = `
-        <td>${item.barcode}</td>
-        <td>${item.name}</td>
+        <td>
+          <strong>${name}</strong><br>
+          <span class="product-meta">${barcode}</span>
+        </td>
         <td>¥${item.price.toFixed(2)}</td>
-        <td>${item.qty}</td>
+        <td class="qty-cell">
+          <button class="button small" type="button" onclick="changeCartQty('${barcodeArg}', ${item.qty - 1})">-</button>
+          <span class="qty-value">${item.qty}</span>
+          <button class="button small" type="button" onclick="changeCartQty('${barcodeArg}', ${item.qty + 1})">+</button>
+        </td>
         <td>¥${item.subtotal.toFixed(2)}</td>
+        <td><button class="button small red" type="button" onclick="removeCartItem('${barcodeArg}')">${escapeHtml(tr('remove', '移除'))}</button></td>
       `;
       body.appendChild(row);
     }
   }
   if (totalEl) totalEl.textContent = total.toFixed(2);
   if (payableEl) payableEl.textContent = applyDiscount(total).toFixed(2);
+}
+
+async function changeCartQty(barcode, qty) {
+  const resultEl = document.getElementById('scanResult');
+  const response = await fetch(`/api/cashier/cart/${encodeURIComponent(barcode)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qty }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    if (resultEl) resultEl.textContent = data.error || '更新购物车失败';
+    if (data.cart) updateCartTable(data.cart.items, data.cart.total);
+    return;
+  }
+  if (resultEl) resultEl.textContent = qty <= 0 ? tr('itemRemoved', '已移除商品。') : tr('cartUpdated', '购物车已更新。');
+  updateCartTable(data.cart.items, data.cart.total);
+}
+
+function renderProductResults(products) {
+  const container = document.getElementById('productResults');
+  const status = document.getElementById('productSearchStatus');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!products || products.length === 0) {
+    if (status) status.textContent = tr('noProductsFound', '没有找到匹配商品。');
+    return;
+  }
+
+  for (const product of products) {
+    const button = document.createElement('button');
+    const disabled = product.stock <= 0;
+    button.type = 'button';
+    button.className = 'product-tile';
+    button.disabled = disabled;
+    button.onclick = () => addProductByBarcode(product.barcode);
+
+    const image = product.image
+      ? `<img class="product-thumb" src="/static/${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">`
+      : `<div class="product-thumb product-placeholder">${escapeHtml(tr('noImage', '无图'))}</div>`;
+
+    button.innerHTML = `
+      ${image}
+      <span>
+        <span class="product-name">${escapeHtml(product.name)}</span>
+        <span class="product-meta">¥${Number(product.price).toFixed(2)} ｜ ${escapeHtml(tr('stock', '库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
+      </span>
+    `;
+    container.appendChild(button);
+  }
+
+  if (status) status.textContent = tr('foundProducts', '找到 {count} 个商品。', { count: products.length });
+}
+
+async function searchProducts() {
+  const input = document.getElementById('productSearch');
+  const status = document.getElementById('productSearchStatus');
+  const keyword = input ? input.value.trim() : '';
+  if (status) status.textContent = tr('searching', '正在搜索...');
+
+  const response = await fetch(`/api/products/search?q=${encodeURIComponent(keyword)}`);
+  const data = await response.json();
+  if (!response.ok) {
+    if (status) status.textContent = data.error || '搜索失败';
+    return;
+  }
+  renderProductResults(data.products);
+}
+
+async function addProductByBarcode(barcode) {
+  const barcodeInput = document.getElementById('cashierBarcode');
+  if (barcodeInput) barcodeInput.value = barcode;
+  await scanCashierBarcode();
+  await searchProducts();
+}
+
+async function removeCartItem(barcode) {
+  const resultEl = document.getElementById('scanResult');
+  const response = await fetch(`/api/cashier/cart/${encodeURIComponent(barcode)}`, {
+    method: 'DELETE',
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    if (resultEl) resultEl.textContent = data.error || '移除商品失败';
+    return;
+  }
+  if (resultEl) resultEl.textContent = tr('itemRemoved', '已移除商品。');
+  updateCartTable(data.cart.items, data.cart.total);
 }
 
 async function verifyMember() {
@@ -612,7 +738,7 @@ function buildReceipt(items, total) {
   const date = new Date().toLocaleString();
   const lines = items.map(item => `
     <tr>
-      <td>${item.name}</td>
+      <td>${escapeHtml(item.name)}</td>
       <td>${item.qty}</td>
       <td>¥${item.price.toFixed(2)}</td>
       <td>¥${item.subtotal.toFixed(2)}</td>
@@ -633,7 +759,7 @@ function buildReceipt(items, total) {
       <body>
         <h2>收银小票</h2>
         <p>时间：${date}</p>
-        <p>会员：${currentMember ? currentMember.name : '无'}（折扣 ${discountText}）</p>
+        <p>会员：${currentMember ? escapeHtml(currentMember.name) : '无'}（折扣 ${escapeHtml(discountText)}）</p>
         <table>
           <thead>
             <tr><th>商品</th><th>数量</th><th>单价</th><th>小计</th></tr>
@@ -654,13 +780,12 @@ function buildReceipt(items, total) {
 function printReceipt() {
   const items = [];
   document.querySelectorAll('#cartBody tr').forEach(row => {
-    const cols = row.querySelectorAll('td');
-    if (cols.length === 5) {
+    if (row.dataset && row.dataset.name) {
       items.push({
-        name: cols[1].textContent.trim(),
-        qty: parseFloat(cols[3].textContent.trim()) || 0,
-        price: parseFloat(cols[2].textContent.replace('¥', '').trim()) || 0,
-        subtotal: parseFloat(cols[4].textContent.replace('¥', '').trim()) || 0,
+        name: row.dataset.name,
+        qty: parseFloat(row.dataset.qty) || 0,
+        price: parseFloat(row.dataset.price) || 0,
+        subtotal: parseFloat(row.dataset.subtotal) || 0,
       });
     }
   });
@@ -679,10 +804,12 @@ function printReceipt() {
 async function checkout() {
   if (!confirm('确认结账并扣减库存吗？')) return;
   const memberId = document.getElementById('memberId') ? document.getElementById('memberId').value.trim() : '';
+  const paymentInput = document.querySelector('input[name="paymentMethod"]:checked');
+  const paymentMethod = paymentInput ? paymentInput.value : '移动支付';
   const response = await fetch('/api/cashier/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ member_id: memberId }),
+    body: JSON.stringify({ member_id: memberId, payment_method: paymentMethod }),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -709,52 +836,31 @@ window.addEventListener('error', function(e) {
   } catch (ex) {}
 });
 
-function printReceipt() {
-  const items = [];
-  document.querySelectorAll('#cartBody tr').forEach(row => {
-    const cols = row.querySelectorAll('td');
-    if (cols.length === 5) {
-      items.push({
-        name: cols[1].textContent.trim(),
-        qty: parseFloat(cols[3].textContent.trim()) || 0,
-        price: parseFloat(cols[2].textContent.replace('¥', '').trim()) || 0,
-        subtotal: parseFloat(cols[4].textContent.replace('¥', '').trim()) || 0,
-      });
-    }
-  });
-  const total = parseFloat(document.getElementById('cartTotal').textContent || '0') || 0;
-  const receiptWindow = window.open('', 'receipt');
-  if (!receiptWindow) {
-    alert('请允许弹出窗口以打印小票。');
-    return;
+document.addEventListener('DOMContentLoaded', function() {
+  const barcodeInput = document.getElementById('cashierBarcode');
+  if (barcodeInput) {
+    barcodeInput.focus();
+    barcodeInput.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        scanCashierBarcode();
+      }
+    });
   }
-  receiptWindow.document.write(buildReceipt(items, total));
-  receiptWindow.document.close();
-  receiptWindow.focus();
-  receiptWindow.print();
-}
 
-async function checkout() {
-  if (!confirm('确认结账并扣减库存吗？')) return;
-  const memberId = document.getElementById('memberId').value.trim();
-  const response = await fetch('/api/cashier/checkout', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ member_id: memberId }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    alert(data.error || '结账失败');
-    return;
+  const productSearch = document.getElementById('productSearch');
+  if (productSearch) {
+    let searchTimer = null;
+    productSearch.addEventListener('input', function() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(searchProducts, 250);
+    });
+    productSearch.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        searchProducts();
+      }
+    });
+    searchProducts();
   }
-  alert(data.message || '结账完成');
-  window.location.reload();
-}
-
-async function cancelCart() {
-  if (!confirm('确认取消本次购物车内容吗？')) return;
-  const response = await fetch('/api/cashier/cancel', { method: 'POST' });
-  if (response.ok) {
-    window.location.reload();
-  }
-}
+});
