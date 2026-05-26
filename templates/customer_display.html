@@ -152,10 +152,18 @@
 
       body.innerHTML = '';
       const isPaid = data.status === 'paid';
+      if (!isPaid) {
+        clearTimeout(completeTimer);
+        completeTimer = null;
+        complete.hidden = true;
+        complete.classList.remove('show');
+      }
       table.hidden = isPaid || items.length === 0;
       empty.hidden = isPaid || items.length > 0;
-      complete.hidden = !isPaid;
-      complete.classList.toggle('show', isPaid && lastStatus !== 'paid');
+      if (isPaid) {
+        complete.hidden = false;
+        complete.classList.toggle('show', lastStatus !== 'paid');
+      }
 
       for (const item of items) {
         const row = document.createElement('tr');
@@ -187,6 +195,7 @@
           empty.hidden = false;
           body.innerHTML = '';
           total.textContent = '0';
+          completeTimer = null;
         }, 5000);
       }
       lastStatus = data.status;
