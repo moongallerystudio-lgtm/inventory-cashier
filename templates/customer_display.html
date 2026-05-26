@@ -29,7 +29,8 @@
     .item-image { width: clamp(44px, 6vw, 76px); aspect-ratio: 1; border: 1px solid #e4e1d8; border-radius: 8px; object-fit: cover; background: #ffffff; }
     .item-name { font-weight: 800; }
     .qty, .price, .subtotal { text-align: right; white-space: nowrap; }
-    .empty { height: 100%; min-height: 0; }
+    .empty { height: 100%; min-height: 0; display: grid; place-items: center; padding: 18px; }
+    .idle-logo { width: min(58%, 420px); max-height: 82%; object-fit: contain; }
     .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; padding: clamp(12px, 2vw, 24px); color: #111111; }
     .total-label { color: #52525b; font-size: clamp(24px, 3vw, 42px); font-weight: 900; }
     .total-value { color: #111111; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
@@ -113,7 +114,9 @@
           <div class="complete-title">{{ t('checkout_complete') }}</div>
           <div class="complete-subtitle">{{ t('thank_you') }}</div>
         </div>
-        <div id="emptyState" class="empty"></div>
+        <div id="emptyState" class="empty">
+          <img class="idle-logo" src="/static/logo.jpg" alt="mooon shop">
+        </div>
       </section>
     </main>
 
