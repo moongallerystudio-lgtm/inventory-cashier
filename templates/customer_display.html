@@ -6,32 +6,33 @@
   <title>{{ t('customer_display') }}</title>
   <style>
     * { box-sizing: border-box; }
-    html, body { min-height: 100%; }
-    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; }
-    .page { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 28px; gap: 22px; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; position: fixed; inset: 0; }
+    .page { height: 100dvh; max-height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 16px; gap: 12px; overflow: hidden; }
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    h1 { margin: 0; font-size: clamp(28px, 4vw, 54px); letter-spacing: 0; }
-    .status { color: #cbd5e1; font-size: clamp(16px, 2vw, 24px); }
+    h1 { margin: 0; font-size: clamp(22px, 3.2vw, 42px); letter-spacing: 0; }
+    .status { color: #cbd5e1; font-size: clamp(13px, 1.7vw, 20px); }
     .language-switch { display: flex; gap: 8px; flex-wrap: wrap; }
     .lang-link { padding: 8px 10px; border-radius: 8px; color: #e2e8f0; background: #1e293b; text-decoration: none; font-weight: 700; }
     .lang-link.active { background: #38bdf8; color: #082f49; }
-    .display { background: #111827; border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
+    .display { min-height: 0; background: #111827; border: 1px solid #334155; border-radius: 8px; overflow: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: clamp(12px, 2vw, 26px); border-bottom: 1px solid #334155; text-align: left; }
-    th { color: #93c5fd; font-size: clamp(15px, 2vw, 24px); background: #172033; }
-    td { font-size: clamp(18px, 2.5vw, 34px); }
+    th, td { padding: clamp(8px, 1.35vw, 18px); border-bottom: 1px solid #334155; text-align: left; }
+    th { position: sticky; top: 0; z-index: 1; color: #93c5fd; font-size: clamp(13px, 1.6vw, 20px); background: #172033; }
+    td { font-size: clamp(16px, 2.2vw, 28px); }
     tr:last-child td { border-bottom: none; }
     .qty, .price, .subtotal { text-align: right; white-space: nowrap; }
-    .empty { min-height: 46vh; display: grid; place-items: center; color: #94a3b8; font-size: clamp(28px, 5vw, 64px); text-align: center; padding: 32px; }
-    .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 20px; background: #020617; border: 1px solid #334155; border-radius: 8px; padding: clamp(18px, 3vw, 34px); }
-    .total-label { color: #93c5fd; font-size: clamp(18px, 2.2vw, 30px); font-weight: 700; }
-    .total-value { color: #facc15; font-size: clamp(48px, 8vw, 110px); font-weight: 900; line-height: 0.95; }
+    .empty { height: 100%; min-height: 0; display: grid; place-items: center; color: #94a3b8; font-size: clamp(24px, 4.2vw, 52px); text-align: center; padding: 24px; }
+    .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; background: #020617; border: 1px solid #334155; border-radius: 8px; padding: clamp(12px, 2vw, 24px); }
+    .total-label { color: #93c5fd; font-size: clamp(16px, 1.9vw, 24px); font-weight: 700; }
+    .total-value { color: #facc15; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
     .paid { color: #86efac; font-weight: 800; }
     @media (max-width: 720px) {
-      .page { padding: 14px; }
-      .topbar { align-items: flex-start; flex-direction: column; }
+      .page { padding: 10px; gap: 8px; }
+      .topbar { align-items: stretch; flex-direction: column; gap: 8px; }
       th:nth-child(2), td:nth-child(2) { display: none; }
-      .totalbar { align-items: flex-start; flex-direction: column; }
+      .totalbar { align-items: center; flex-direction: row; }
+      .updated-at { display: none; }
     }
   </style>
 </head>
@@ -63,7 +64,7 @@
     <footer class="totalbar">
       <div>
         <div class="total-label">{{ t('total') }}</div>
-        <div id="updatedAt" class="status"></div>
+        <div id="updatedAt" class="status updated-at"></div>
       </div>
       <div class="total-value">¥<span id="displayTotal">0</span></div>
     </footer>
