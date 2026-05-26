@@ -16,9 +16,8 @@
     .lang-link { padding: 8px 10px; border-radius: 8px; color: #27272a; background: #e7e5df; text-decoration: none; font-weight: 700; }
     .lang-link.active { background: #111111; color: #ffffff; }
     .content { min-height: 0; display: grid; grid-template-columns: minmax(230px, 0.36fr) minmax(0, 0.64fr); gap: 12px; }
-    .brand-panel { min-height: 0; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: center; padding: 18px; overflow: hidden; }
+    .brand-panel { min-height: 0; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; display: grid; align-items: center; padding: 18px; overflow: hidden; }
     .brand-logo { width: 100%; max-width: 420px; max-height: 100%; object-fit: contain; justify-self: center; }
-    .brand-caption { margin-top: 10px; text-align: center; font-size: clamp(16px, 2vw, 26px); font-weight: 800; letter-spacing: 0; text-transform: lowercase; }
     .display { min-height: 0; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; overflow: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: clamp(8px, 1.35vw, 18px); border-bottom: 1px solid #e4e1d8; text-align: left; }
@@ -42,7 +41,6 @@
       .content { grid-template-columns: 1fr; grid-template-rows: minmax(110px, 0.28fr) minmax(0, 0.72fr); }
       .brand-panel { grid-template-columns: auto 1fr; grid-template-rows: 1fr; gap: 12px; padding: 10px; }
       .brand-logo { width: auto; height: 100%; max-width: 120px; }
-      .brand-caption { margin-top: 0; text-align: left; }
       th:nth-child(2), td:nth-child(2) { display: none; }
       .totalbar { align-items: center; flex-direction: row; }
     }
@@ -61,7 +59,6 @@
     <main class="content">
       <section class="brand-panel" aria-label="mooon shop">
         <img class="brand-logo" src="/static/logo.jpg" alt="mooon shop">
-        <div class="brand-caption">mooon shop</div>
       </section>
 
       <section class="display">
