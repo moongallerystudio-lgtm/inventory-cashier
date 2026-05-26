@@ -6,6 +6,51 @@ let quaggaRunning = false;
 let currentMember = null;
 let lastImageDataUrl = null;
 let lastRotation = 0;
+let audioContext = null;
+
+function getAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  if (!audioContext) audioContext = new AudioContextClass();
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().catch(() => {});
+  }
+  return audioContext;
+}
+
+function playToneSequence(notes) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime + 0.01;
+  notes.forEach((note) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(note.freq, start + note.at);
+    gain.gain.setValueAtTime(0.0001, start + note.at);
+    gain.gain.exponentialRampToValueAtTime(note.volume || 0.16, start + note.at + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + note.at + note.duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start + note.at);
+    osc.stop(start + note.at + note.duration + 0.03);
+  });
+}
+
+function playScanSound() {
+  playToneSequence([
+    { freq: 1046.5, at: 0, duration: 0.09, volume: 0.13 },
+    { freq: 1568, at: 0.08, duration: 0.12, volume: 0.15 },
+  ]);
+}
+
+function playCheckoutSound() {
+  playToneSequence([
+    { freq: 783.99, at: 0, duration: 0.12, volume: 0.13 },
+    { freq: 1046.5, at: 0.12, duration: 0.14, volume: 0.15 },
+    { freq: 1318.51, at: 0.26, duration: 0.2, volume: 0.16 },
+  ]);
+}
 
 function tr(key, fallback, params = {}) {
   const dict = window.APP_I18N || {};
@@ -551,6 +596,7 @@ async function scanCashierBarcode() {
 
   resultEl.textContent = `已加入：${data.product.name} ${formatJpyWithSymbol(data.product.price)}，数量 ${data.product.qty}`;
   updateCartTable(data.cart.items, data.cart.total);
+  playScanSound();
   barcodeInput.value = '';
 }
 
@@ -622,6 +668,7 @@ async function changeCartQty(barcode, qty) {
   }
   if (resultEl) resultEl.textContent = qty <= 0 ? tr('itemRemoved', '已移除商品。') : tr('cartUpdated', '购物车已更新。');
   updateCartTable(data.cart.items, data.cart.total);
+  if (qty > 0) playScanSound();
 }
 
 function renderProductResults(products) {
@@ -824,6 +871,7 @@ async function checkout() {
     alert(data.error || '结账失败');
     return;
   }
+  playCheckoutSound();
   alert(data.message || '结账完成');
   window.location.reload();
 }

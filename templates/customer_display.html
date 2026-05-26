@@ -133,6 +133,40 @@
     let activeCheckoutKey = null;
     let dismissedCheckoutKey = null;
     let lastPayloadKey = null;
+    let audioContext = null;
+
+    function getAudioContext() {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+      if (!audioContext) audioContext = new AudioContextClass();
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {});
+      }
+      return audioContext;
+    }
+
+    function playCheckoutSound() {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      const start = ctx.currentTime + 0.01;
+      [
+        { freq: 783.99, at: 0, duration: 0.12, volume: 0.13 },
+        { freq: 1046.5, at: 0.12, duration: 0.14, volume: 0.15 },
+        { freq: 1318.51, at: 0.26, duration: 0.2, volume: 0.16 },
+      ].forEach((note) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(note.freq, start + note.at);
+        gain.gain.setValueAtTime(0.0001, start + note.at);
+        gain.gain.exponentialRampToValueAtTime(note.volume, start + note.at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + note.at + note.duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start + note.at);
+        osc.stop(start + note.at + note.duration + 0.03);
+      });
+    }
 
     function formatJpy(value) {
       return String(Math.round(Number(value) || 0));
@@ -221,6 +255,7 @@
 
       if (showComplete && activeCheckoutKey !== checkoutKey) {
         activeCheckoutKey = checkoutKey;
+        playCheckoutSound();
         clearTimeout(completeTimer);
         completeTimer = setTimeout(() => {
           complete.hidden = true;
