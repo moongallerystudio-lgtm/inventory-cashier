@@ -602,13 +602,16 @@ def cart_payload():
     }
 
 
-def display_payload(items=None, total=0, status="active"):
-    return {
+def display_payload(items=None, total=0, status="active", checkout_id=None):
+    payload = {
         "items": items or [],
         "total": round(total or 0),
         "status": status,
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    if checkout_id is not None:
+        payload["checkout_id"] = checkout_id
+    return payload
 
 
 def save_customer_display(payload):
@@ -638,6 +641,7 @@ def get_customer_display_payload():
     payload.setdefault("items", [])
     payload.setdefault("total", 0)
     payload.setdefault("status", "idle")
+    payload.setdefault("checkout_id", None)
     payload.setdefault("updated_at", state.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
     if payload.get("status") == "paid" and (datetime.now() - state.updated_at).total_seconds() > 7:
         return save_customer_display(display_payload(status="idle"))
@@ -1168,6 +1172,7 @@ def api_checkout():
         [{key: item[key] for key in ("barcode", "name", "price", "qty", "subtotal", "image")} for item in checkout_items],
         payable,
         "paid",
+        checkout_id=sale.id,
     ))
     session["cart"] = {}
     message = f"结账完成，已记录销售单 #{sale.id}（{payment_method}）"

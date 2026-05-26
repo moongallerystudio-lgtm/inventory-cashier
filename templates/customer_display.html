@@ -127,6 +127,8 @@
   <script>
     let completeTimer = null;
     let lastStatus = null;
+    let activeCheckoutKey = null;
+    let dismissedCheckoutKey = null;
 
     function formatJpy(value) {
       return String(Math.round(Number(value) || 0));
@@ -152,17 +154,22 @@
 
       body.innerHTML = '';
       const isPaid = data.status === 'paid';
+      const checkoutKey = data.checkout_id || data.updated_at || 'paid';
       if (!isPaid) {
         clearTimeout(completeTimer);
         completeTimer = null;
+        activeCheckoutKey = null;
         complete.hidden = true;
         complete.classList.remove('show');
       }
       table.hidden = isPaid || items.length === 0;
       empty.hidden = isPaid || items.length > 0;
-      if (isPaid) {
+      if (isPaid && dismissedCheckoutKey !== checkoutKey) {
         complete.hidden = false;
-        complete.classList.toggle('show', lastStatus !== 'paid');
+        complete.classList.toggle('show', activeCheckoutKey !== checkoutKey);
+      } else if (isPaid) {
+        complete.hidden = true;
+        complete.classList.remove('show');
       }
 
       for (const item of items) {
@@ -186,7 +193,8 @@
       status.textContent = '';
       status.className = 'status';
 
-      if (isPaid && lastStatus !== 'paid') {
+      if (isPaid && activeCheckoutKey !== checkoutKey && dismissedCheckoutKey !== checkoutKey) {
+        activeCheckoutKey = checkoutKey;
         clearTimeout(completeTimer);
         completeTimer = setTimeout(() => {
           complete.hidden = true;
@@ -195,6 +203,7 @@
           empty.hidden = false;
           body.innerHTML = '';
           total.textContent = '0';
+          dismissedCheckoutKey = checkoutKey;
           completeTimer = null;
         }, 5000);
       }
