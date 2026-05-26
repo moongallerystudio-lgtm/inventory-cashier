@@ -15,7 +15,7 @@ services:
 
 databases:
   - name: inventory-cashier-db
-    plan: basic-256mb
+    plan: free
     databaseName: inventory_cashier
     user: inventory_cashier
-    postgresVersion: "15"
+    postgresMajorVersion: "15"
