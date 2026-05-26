@@ -90,6 +90,7 @@ TRANSLATIONS = {
         "waiting_for_cart": "等待收银录入商品",
         "last_updated": "最后更新",
         "paid": "已结账",
+        "thank_you": "感谢购买",
         "stock_after_checkout": "结账后库存将自动减少。",
         "sales_order": "销售单",
         "time": "时间",
@@ -179,6 +180,7 @@ TRANSLATIONS = {
         "waiting_for_cart": "Waiting for items",
         "last_updated": "Last Updated",
         "paid": "Paid",
+        "thank_you": "Thank you",
         "stock_after_checkout": "Stock will be reduced after checkout.",
         "sales_order": "Sale",
         "time": "Time",
@@ -268,6 +270,7 @@ TRANSLATIONS = {
         "waiting_for_cart": "商品入力待ち",
         "last_updated": "最終更新",
         "paid": "会計済み",
+        "thank_you": "ありがとうございました",
         "stock_after_checkout": "会計後に在庫が自動で減ります。",
         "sales_order": "売上",
         "time": "時間",
@@ -633,6 +636,8 @@ def get_customer_display_payload():
     payload.setdefault("total", 0)
     payload.setdefault("status", "idle")
     payload.setdefault("updated_at", state.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
+    if payload.get("status") == "paid" and (datetime.now() - state.updated_at).total_seconds() > 6:
+        return save_customer_display(display_payload(status="idle"))
     return payload
 
 
