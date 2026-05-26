@@ -28,9 +28,7 @@
     .item-image { width: clamp(44px, 6vw, 76px); aspect-ratio: 1; border: 1px solid #e4e1d8; border-radius: 8px; object-fit: cover; background: #ffffff; }
     .item-name { font-weight: 800; }
     .qty, .price, .subtotal { text-align: right; white-space: nowrap; }
-    .empty { height: 100%; min-height: 0; display: grid; place-items: center; color: #71717a; font-size: clamp(24px, 4.2vw, 52px); text-align: center; padding: 24px; }
-    .empty-inner { display: grid; justify-items: center; gap: 16px; }
-    .empty-logo { width: min(280px, 55%); max-height: 38vh; object-fit: contain; opacity: 0.9; }
+    .empty { height: 100%; min-height: 0; }
     .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; padding: clamp(12px, 2vw, 24px); color: #111111; }
     .total-label { color: #52525b; font-size: clamp(24px, 3vw, 42px); font-weight: 900; }
     .total-value { color: #111111; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
@@ -127,11 +125,7 @@
           </thead>
           <tbody id="displayBody"></tbody>
         </table>
-        <div id="emptyState" class="empty">
-          <div class="empty-inner">
-            <img class="empty-logo" src="/static/logo.jpg" alt="mooon shop">
-          </div>
-        </div>
+        <div id="emptyState" class="empty"></div>
       </section>
     </main>
 
@@ -233,7 +227,7 @@
     }
 
     refreshDisplay();
-    setInterval(refreshDisplay, 1000);
+    setInterval(refreshDisplay, 300);
   </script>
 </body>
 </html>
