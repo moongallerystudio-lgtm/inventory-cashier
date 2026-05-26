@@ -2,6 +2,8 @@
 
 这是一个基于 Flask 的库存管理与收银系统，支持扫码、商品管理、会员折扣等功能。
 
+Inventory and cashier management system.
+
 ## 云部署
 
 ### 1. 使用 Heroku / Render / Railway
