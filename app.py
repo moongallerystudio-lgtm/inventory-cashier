@@ -385,6 +385,16 @@ def translate(key):
     return TRANSLATIONS.get(lang, TRANSLATIONS["zh"]).get(key, TRANSLATIONS["zh"].get(key, key))
 
 
+def format_jpy(value):
+    try:
+        return str(int(round(float(value or 0))))
+    except (TypeError, ValueError):
+        return "0"
+
+
+app.jinja_env.filters["jpy"] = format_jpy
+
+
 def language_switch():
     current = get_language()
     back = request.full_path if request.query_string else request.path
@@ -559,13 +569,13 @@ def cart_payload():
     items, total = cart_items()
     return {
         "items": items,
-        "total": round(total, 2),
+        "total": round(total),
     }
 
 
 def calculate_payable(total, member):
     discount = member.discount if member else 0
-    return round(total * (1 - discount / 100), 2)
+    return round(total * (1 - discount / 100))
 
 
 def normalize_payment_method(value):
@@ -855,8 +865,8 @@ def sales():
     summary = {
         "orders": len(sales),
         "items": sum(row["qty"] for row in rows),
-        "total": round(sum(sale.total for sale in sales), 2),
-        "payable": round(sum(sale.payable for sale in sales), 2),
+        "total": round(sum(sale.total for sale in sales)),
+        "payable": round(sum(sale.payable for sale in sales)),
     }
     return render_template(
         "sales.html",
@@ -1025,7 +1035,7 @@ def api_checkout():
             return jsonify({"error": f"商品 {barcode} 不存在，请先移出购物车"}), 400
         if qty > product.stock:
             return jsonify({"error": f"{product.name} 库存不足，当前库存 {product.stock}"}), 400
-        subtotal = round(product.price * qty, 2)
+        subtotal = round(product.price * qty)
         total += subtotal
         checkout_items.append({
             "product": product,
@@ -1036,7 +1046,7 @@ def api_checkout():
             "subtotal": subtotal,
         })
 
-    total = round(total, 2)
+    total = round(total)
     payable = calculate_payable(total, member)
     sale = Sale(
         created_at=datetime.now(),

@@ -72,11 +72,11 @@
       </div>
       <div class="summary-box">
         <div class="summary-label">{{ t('original_total') }}</div>
-        <div class="summary-value">¥{{ '%.2f'|format(summary.total) }}</div>
+        <div class="summary-value">¥{{ summary.total|jpy }}</div>
       </div>
       <div class="summary-box">
         <div class="summary-label">{{ t('paid_amount') }}</div>
-        <div class="summary-value">¥{{ '%.2f'|format(summary.payable) }}</div>
+        <div class="summary-value">¥{{ summary.payable|jpy }}</div>
       </div>
     </div>
 
@@ -115,10 +115,10 @@
                   {{ row.name }}<br>
                   <span class="muted">{{ row.barcode }}</span>
                 </td>
-                <td>¥{{ '%.2f'|format(row.price) }}</td>
+                <td>¥{{ row.price|jpy }}</td>
                 <td>{{ row.qty }}</td>
-                <td>¥{{ '%.2f'|format(row.subtotal) }}</td>
-                <td>¥{{ '%.2f'|format(row.order_payable) }}</td>
+                <td>¥{{ row.subtotal|jpy }}</td>
+                <td>¥{{ row.order_payable|jpy }}</td>
               </tr>
             {% else %}
               <tr><td colspan="9">{{ t('no_sales') }}</td></tr>

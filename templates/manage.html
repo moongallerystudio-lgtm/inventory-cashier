@@ -48,7 +48,7 @@
           <div class="form-row">
             <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" required></label>
             <label>{{ t('product_name') }}<input type="text" name="name" placeholder="{{ t('product_name') }}" required></label>
-            <label>{{ t('price') }}<input type="number" name="price" step="0.01" placeholder="12.50" required></label>
+            <label>{{ t('price') }}<input type="number" name="price" step="1" placeholder="120" required></label>
             <label>{{ t('stock') }}<input type="number" name="stock" step="1" placeholder="100" required></label>
           </div>
           <div class="form-row">
@@ -83,7 +83,7 @@
                 <td>{{ product.barcode }}</td>
                 <td>{{ product.name }}</td>
                 <td>{% if product.image %}<img src="/static/{{ product.image }}" alt="{{ product.name }}" style="max-width:80px; border-radius:6px;">{% else %}-{% endif %}</td>
-                <td>¥{{ '%.2f'|format(product.price) }}</td>
+                <td>¥{{ product.price|jpy }}</td>
                 <td>{{ product.stock }}</td>
                 <td>
                   <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm('确认删除？');">

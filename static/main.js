@@ -16,6 +16,14 @@ function tr(key, fallback, params = {}) {
   return text;
 }
 
+function formatJpy(value) {
+  return String(Math.round(Number(value) || 0));
+}
+
+function formatJpyWithSymbol(value) {
+  return `¥${formatJpy(value)}`;
+}
+
 async function startScan(targetId) {
   currentScanTarget = targetId;
   const videoWrapper = document.getElementById('videoWrapper');
@@ -541,7 +549,7 @@ async function scanCashierBarcode() {
     return;
   }
 
-  resultEl.textContent = `已加入：${data.product.name} ¥${data.product.price.toFixed(2)}，数量 ${data.product.qty}`;
+  resultEl.textContent = `已加入：${data.product.name} ${formatJpyWithSymbol(data.product.price)}，数量 ${data.product.qty}`;
   updateCartTable(data.cart.items, data.cart.total);
   barcodeInput.value = '';
 }
@@ -583,20 +591,20 @@ function updateCartTable(items, total) {
           <strong>${name}</strong><br>
           <span class="product-meta">${barcode}</span>
         </td>
-        <td>¥${item.price.toFixed(2)}</td>
+        <td>${formatJpyWithSymbol(item.price)}</td>
         <td class="qty-cell">
           <button class="button small" type="button" onclick="changeCartQty('${barcodeArg}', ${item.qty - 1})">-</button>
           <span class="qty-value">${item.qty}</span>
           <button class="button small" type="button" onclick="changeCartQty('${barcodeArg}', ${item.qty + 1})">+</button>
         </td>
-        <td>¥${item.subtotal.toFixed(2)}</td>
+        <td>${formatJpyWithSymbol(item.subtotal)}</td>
         <td><button class="button small red" type="button" onclick="removeCartItem('${barcodeArg}')">${escapeHtml(tr('remove', '移除'))}</button></td>
       `;
       body.appendChild(row);
     }
   }
-  if (totalEl) totalEl.textContent = total.toFixed(2);
-  if (payableEl) payableEl.textContent = applyDiscount(total).toFixed(2);
+  if (totalEl) totalEl.textContent = formatJpy(total);
+  if (payableEl) payableEl.textContent = formatJpy(applyDiscount(total));
 }
 
 async function changeCartQty(barcode, qty) {
@@ -643,7 +651,7 @@ function renderProductResults(products) {
       ${image}
       <span>
         <span class="product-name">${escapeHtml(product.name)}</span>
-        <span class="product-meta">¥${Number(product.price).toFixed(2)} ｜ ${escapeHtml(tr('stock', '库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
+        <span class="product-meta">${formatJpyWithSymbol(product.price)} ｜ ${escapeHtml(tr('stock', '库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
       </span>
     `;
     container.appendChild(button);
@@ -729,19 +737,19 @@ function updateTotals() {
   const totalEl = document.getElementById('cartTotal');
   const payableEl = document.getElementById('cartPayable');
   const currentTotal = parseFloat(totalEl ? totalEl.textContent : '0') || 0;
-  if (payableEl) payableEl.textContent = applyDiscount(currentTotal).toFixed(2);
+  if (payableEl) payableEl.textContent = formatJpy(applyDiscount(currentTotal));
 }
 
 function buildReceipt(items, total) {
   const discountText = currentMember ? `${currentMember.discount}%` : '无';
-  const payable = applyDiscount(total).toFixed(2);
+  const payable = formatJpy(applyDiscount(total));
   const date = new Date().toLocaleString();
   const lines = items.map(item => `
     <tr>
       <td>${escapeHtml(item.name)}</td>
       <td>${item.qty}</td>
-      <td>¥${item.price.toFixed(2)}</td>
-      <td>¥${item.subtotal.toFixed(2)}</td>
+      <td>${formatJpyWithSymbol(item.price)}</td>
+      <td>${formatJpyWithSymbol(item.subtotal)}</td>
     </tr>
   `).join('');
   return `
@@ -769,7 +777,7 @@ function buildReceipt(items, total) {
           </tbody>
         </table>
         <div class="summary">
-          <p>原总价：¥${total.toFixed(2)}</p>
+          <p>原总价：${formatJpyWithSymbol(total)}</p>
           <p>折后价：¥${payable}</p>
         </div>
       </body>

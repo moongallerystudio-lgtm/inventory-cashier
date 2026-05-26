@@ -132,13 +132,13 @@
                       <strong>{{ item.name }}</strong><br>
                       <span class="product-meta">{{ item.barcode }}</span>
                     </td>
-                    <td>¥{{ '%.2f'|format(item.price) }}</td>
+                    <td>¥{{ item.price|jpy }}</td>
                     <td class="qty-cell">
                       <button class="button small" type="button" onclick="changeCartQty({{ item.barcode|tojson }}, {{ item.qty - 1 }})">-</button>
                       <span class="qty-value">{{ item.qty }}</span>
                       <button class="button small" type="button" onclick="changeCartQty({{ item.barcode|tojson }}, {{ item.qty + 1 }})">+</button>
                     </td>
-                    <td>¥{{ '%.2f'|format(item.subtotal) }}</td>
+                    <td>¥{{ item.subtotal|jpy }}</td>
                     <td><button class="button small red" type="button" onclick="removeCartItem({{ item.barcode|tojson }})">{{ t('remove') }}</button></td>
                   </tr>
                 {% endfor %}
@@ -151,11 +151,11 @@
         <div class="totals">
           <div class="total-box">
             <div class="total-label">{{ t('original_total') }}</div>
-            <div class="total-value">¥<span id="cartTotal">{{ '%.2f'|format(total) }}</span></div>
+            <div class="total-value">¥<span id="cartTotal">{{ total|jpy }}</span></div>
           </div>
           <div class="total-box payable">
             <div class="total-label">{{ t('payable') }}</div>
-            <div class="total-value">¥<span id="cartPayable">{{ '%.2f'|format(total) }}</span></div>
+            <div class="total-value">¥<span id="cartPayable">{{ total|jpy }}</span></div>
           </div>
         </div>
         <div class="payment-methods" aria-label="付款方式">
