@@ -51,7 +51,7 @@
     <header class="topbar">
       <div>
         <h1>mooon shop</h1>
-        <div id="displayStatus" class="status">{{ t('waiting_for_cart') }}</div>
+        <div id="displayStatus" class="status"></div>
       </div>
       {{ language_switch() }}
     </header>
@@ -76,7 +76,6 @@
         <div id="emptyState" class="empty">
           <div class="empty-inner">
             <img class="empty-logo" src="/static/logo.jpg" alt="mooon shop">
-            <span>{{ t('waiting_for_cart') }}</span>
           </div>
         </div>
       </section>
@@ -92,7 +91,6 @@
 
   <script>
     const labels = {
-      waiting: {{ t('waiting_for_cart')|tojson }},
       paid: {{ t('paid')|tojson }}
     };
 
@@ -120,7 +118,6 @@
       body.innerHTML = '';
       table.hidden = items.length === 0;
       empty.hidden = items.length > 0;
-      empty.textContent = labels.waiting;
 
       for (const item of items) {
         const row = document.createElement('tr');
@@ -140,7 +137,7 @@
       }
 
       total.textContent = formatJpy(data.total);
-      status.textContent = data.status === 'paid' ? labels.paid : (items.length ? '' : labels.waiting);
+      status.textContent = data.status === 'paid' ? labels.paid : '';
       status.className = data.status === 'paid' ? 'status paid' : 'status';
     }
 
