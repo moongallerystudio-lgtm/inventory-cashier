@@ -33,7 +33,7 @@
     .empty-inner { display: grid; justify-items: center; gap: 16px; }
     .empty-logo { width: min(280px, 55%); max-height: 38vh; object-fit: contain; opacity: 0.9; }
     .totalbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; background: #ffffff; border: 1px solid #dedbd2; border-radius: 8px; padding: clamp(12px, 2vw, 24px); color: #111111; }
-    .total-label { color: #52525b; font-size: clamp(16px, 1.9vw, 24px); font-weight: 700; }
+    .total-label { color: #52525b; font-size: clamp(24px, 3vw, 42px); font-weight: 900; }
     .total-value { color: #111111; font-size: clamp(38px, 6.5vw, 82px); font-weight: 900; line-height: 0.95; }
     .paid { color: #15803d; font-weight: 800; }
     @media (max-width: 720px) {
@@ -45,7 +45,6 @@
       .brand-caption { margin-top: 0; text-align: left; }
       th:nth-child(2), td:nth-child(2) { display: none; }
       .totalbar { align-items: center; flex-direction: row; }
-      .updated-at { display: none; }
     }
   </style>
 </head>
@@ -89,7 +88,6 @@
     <footer class="totalbar">
       <div>
         <div class="total-label">{{ t('total') }}</div>
-        <div id="updatedAt" class="status updated-at"></div>
       </div>
       <div class="total-value">¥<span id="displayTotal">0</span></div>
     </footer>
@@ -98,8 +96,7 @@
   <script>
     const labels = {
       waiting: {{ t('waiting_for_cart')|tojson }},
-      paid: {{ t('paid')|tojson }},
-      lastUpdated: {{ t('last_updated')|tojson }}
+      paid: {{ t('paid')|tojson }}
     };
 
     function formatJpy(value) {
@@ -122,7 +119,6 @@
       const empty = document.getElementById('emptyState');
       const status = document.getElementById('displayStatus');
       const total = document.getElementById('displayTotal');
-      const updatedAt = document.getElementById('updatedAt');
 
       body.innerHTML = '';
       table.hidden = items.length === 0;
@@ -149,7 +145,6 @@
       total.textContent = formatJpy(data.total);
       status.textContent = data.status === 'paid' ? labels.paid : (items.length ? '' : labels.waiting);
       status.className = data.status === 'paid' ? 'status paid' : 'status';
-      updatedAt.textContent = data.updated_at ? `${labels.lastUpdated}: ${data.updated_at}` : '';
     }
 
     async function refreshDisplay() {
