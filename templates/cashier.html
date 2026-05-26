@@ -27,7 +27,7 @@
     .lang-link { padding: 8px 10px; border-radius: 8px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
     .lang-link.active { background: #2563eb; color: #fff; }
     .input-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin-top: 12px; }
-    .member-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin-top: 14px; }
+    .member-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; margin-top: 14px; }
     input[type=text], input[type=search] { width: 100%; min-height: 52px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 18px; background: #fff; }
     .notice { min-height: 24px; margin-top: 10px; color: #475569; font-size: 15px; }
     .search-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
@@ -111,6 +111,7 @@
           <h2>{{ t('member_discount') }}</h2>
           <div class="member-row">
             <input id="memberId" type="text" inputmode="numeric" autocomplete="off" placeholder="{{ t('member_id') }}" />
+            <button class="button green" onclick="startScan('memberId')">{{ t('scan') }}</button>
             <button class="button" onclick="verifyMember()">{{ t('verify') }}</button>
             <button class="button gray" onclick="clearMember()">{{ t('clear') }}</button>
           </div>
@@ -161,16 +162,24 @@
         </div>
         <div class="payment-methods" aria-label="付款方式">
           <label class="payment-option">
-            <input type="radio" name="paymentMethod" value="现金">
+            <input type="radio" name="paymentMethod" value="现金" checked>
             <span>{{ t('cash') }}</span>
           </label>
           <label class="payment-option">
-            <input type="radio" name="paymentMethod" value="刷卡">
+            <input type="radio" name="paymentMethod" value="信用卡">
             <span>{{ t('card') }}</span>
           </label>
           <label class="payment-option">
-            <input type="radio" name="paymentMethod" value="移动支付" checked>
-            <span>{{ t('mobile_pay') }}</span>
+            <input type="radio" name="paymentMethod" value="PayPay">
+            <span>{{ t('paypay') }}</span>
+          </label>
+          <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="微信支付">
+            <span>{{ t('wechat_pay') }}</span>
+          </label>
+          <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="支付宝">
+            <span>{{ t('alipay') }}</span>
           </label>
           <label class="payment-option">
             <input type="radio" name="paymentMethod" value="其他">

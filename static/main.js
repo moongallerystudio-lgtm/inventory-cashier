@@ -860,7 +860,7 @@ async function checkout() {
   if (!confirm('确认结账并扣减库存吗？')) return;
   const memberId = document.getElementById('memberId') ? document.getElementById('memberId').value.trim() : '';
   const paymentInput = document.querySelector('input[name="paymentMethod"]:checked');
-  const paymentMethod = paymentInput ? paymentInput.value : '移动支付';
+  const paymentMethod = paymentInput ? paymentInput.value : '现金';
   const response = await fetch('/api/cashier/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

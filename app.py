@@ -72,8 +72,11 @@ TRANSLATIONS = {
         "paid_amount": "实收金额",
         "payment_method": "付款方式",
         "cash": "现金",
-        "card": "刷卡",
+        "card": "信用卡",
         "mobile_pay": "移动支付",
+        "paypay": "PayPay",
+        "wechat_pay": "微信支付",
+        "alipay": "支付宝",
         "other": "其他",
         "barcode_entry": "扫码 / 输入条码",
         "barcode_placeholder": "扫码或输入条形码",
@@ -163,8 +166,11 @@ TRANSLATIONS = {
         "paid_amount": "Paid Amount",
         "payment_method": "Payment Method",
         "cash": "Cash",
-        "card": "Card",
+        "card": "Credit Card",
         "mobile_pay": "Mobile Pay",
+        "paypay": "PayPay",
+        "wechat_pay": "WeChat Pay",
+        "alipay": "Alipay",
         "other": "Other",
         "barcode_entry": "Scan / Enter Barcode",
         "barcode_placeholder": "Scan or enter barcode",
@@ -254,8 +260,11 @@ TRANSLATIONS = {
         "paid_amount": "支払額",
         "payment_method": "支払方法",
         "cash": "現金",
-        "card": "カード",
+        "card": "クレジットカード",
         "mobile_pay": "モバイル決済",
+        "paypay": "PayPay",
+        "wechat_pay": "WeChat Pay",
+        "alipay": "Alipay",
         "other": "その他",
         "barcode_entry": "スキャン / バーコード入力",
         "barcode_placeholder": "バーコードをスキャンまたは入力",
@@ -316,10 +325,14 @@ TRANSLATIONS = {
 
 PAYMENT_METHOD_KEYS = {
     "现金": "cash",
-    "刷卡": "card",
-    "移动支付": "mobile_pay",
+    "信用卡": "card",
+    "PayPay": "paypay",
+    "微信支付": "wechat_pay",
+    "支付宝": "alipay",
     "其他": "other",
     "未记录": "none",
+    "刷卡": "card",
+    "移动支付": "mobile_pay",
 }
 
 class Product(db.Model):
@@ -715,7 +728,7 @@ def calculate_payable(total, member):
 
 
 def normalize_payment_method(value):
-    allowed_methods = {"现金", "刷卡", "移动支付", "其他"}
+    allowed_methods = {"现金", "信用卡", "PayPay", "微信支付", "支付宝", "其他"}
     method = str(value or "").strip()
     return method if method in allowed_methods else "其他"
 
