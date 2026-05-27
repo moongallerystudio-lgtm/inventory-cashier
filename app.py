@@ -13,6 +13,11 @@ from datetime import datetime, time
 from zoneinfo import ZoneInfo
 import openpyxl
 from markupsafe import Markup
+try:
+    from PIL import Image, ImageOps
+except ImportError:
+    Image = None
+    ImageOps = None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-for-production")
@@ -21,6 +26,8 @@ BASE = Path(__file__).resolve().parent
 UPLOADS_DIR = BASE / "static" / "uploads"
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
 APP_TIMEZONE = ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Tokyo"))
+PRODUCT_IMAGE_MAX_SIZE = (1200, 1200)
+PRODUCT_IMAGE_QUALITY = 78
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if DATABASE_URL:
@@ -566,6 +573,35 @@ def allowed_image(filename):
     return suffix in ALLOWED_IMAGE_EXTENSIONS
 
 
+def compress_product_image(image_bytes, fallback_mime="image/jpeg"):
+    if not image_bytes or Image is None:
+        return image_bytes, fallback_mime
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image = ImageOps.exif_transpose(image)
+            resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.BICUBIC)
+            image.thumbnail(PRODUCT_IMAGE_MAX_SIZE, resample)
+            if image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info):
+                background = Image.new("RGB", image.size, (255, 255, 255))
+                alpha = image.convert("RGBA").getchannel("A")
+                background.paste(image.convert("RGBA"), mask=alpha)
+                image = background
+            else:
+                image = image.convert("RGB")
+
+            output = io.BytesIO()
+            image.save(
+                output,
+                format="JPEG",
+                quality=PRODUCT_IMAGE_QUALITY,
+                optimize=True,
+                progressive=True,
+            )
+            return output.getvalue(), "image/jpeg"
+    except Exception:
+        return image_bytes, fallback_mime
+
+
 def save_image_file(file_storage, barcode):
     if not file_storage:
         return None
@@ -594,8 +630,11 @@ def save_product_image(file_storage, barcode):
     image_bytes = file_storage.read()
     if not image_bytes:
         return None
+    original_mime = file_storage.mimetype or mimetypes.guess_type(filename)[0] or "image/jpeg"
+    image_bytes, image_mime = compress_product_image(image_bytes, original_mime)
     ensure_directories()
-    target_name = f"{secure_filename(barcode)}{suffix}"
+    target_suffix = ".jpg" if image_mime == "image/jpeg" else suffix
+    target_name = f"{secure_filename(barcode)}{target_suffix}"
     target_path = UPLOADS_DIR / target_name
     try:
         target_path.write_bytes(image_bytes)
@@ -604,7 +643,7 @@ def save_product_image(file_storage, barcode):
     return {
         "path": f"uploads/{target_name}",
         "data": image_bytes,
-        "mime": file_storage.mimetype or "image/jpeg",
+        "mime": image_mime,
     }
 
 
