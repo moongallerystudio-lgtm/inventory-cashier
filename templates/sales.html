@@ -17,6 +17,7 @@
     .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; text-decoration: none; color: #fff; background: #2563eb; border: none; cursor: pointer; font-weight: 700; font-size: 15px; white-space: nowrap; }
     .button.gray { background: #475569; }
     .button.green { background: #16a34a; }
+    .button.red { background: #dc2626; }
     .language-switch { display: flex; gap: 8px; flex-wrap: wrap; }
     .lang-link { padding: 8px 10px; border-radius: 8px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
     .lang-link.active { background: #2563eb; color: #fff; }
@@ -27,11 +28,14 @@
     .summary-label { color: #64748b; font-size: 14px; }
     .summary-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
     .table-wrap { overflow-x: auto; border: 1px solid #dde5ee; border-radius: 8px; margin-top: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1040px; }
     th, td { padding: 10px 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: top; }
     th { background: #f1f5f9; color: #334155; font-size: 14px; }
     tr:last-child td { border-bottom: none; }
     .muted { color: #64748b; }
+    .alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; }
+    .alert.error { background: #ffe2e6; color: #9a161b; }
+    .alert.success { background: #e7f8ed; color: #1f6b2f; }
     @media (max-width: 760px) {
       body { padding: 12px; }
       .topbar { align-items: flex-start; flex-direction: column; }
@@ -51,6 +55,14 @@
         <a class="button" href="/cashier">{{ t('cashier') }}</a>
       </div>
     </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
 
     <div class="panel">
       <form class="toolbar" method="get" action="/sales">
@@ -95,6 +107,7 @@
               <th>{{ t('qty') }}</th>
               <th>{{ t('subtotal') }}</th>
               <th>{{ t('paid_amount') }}</th>
+              <th>{{ t('action') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -122,10 +135,16 @@
                 <td>¥{{ row.subtotal|jpy }}</td>
                 {% if row.item_index == 0 %}
                   <td rowspan="{{ row.item_count }}">¥{{ row.order_payable|jpy }}</td>
+                  <td rowspan="{{ row.item_count }}">
+                    <form method="post" action="/sales/delete/{{ row.sale_id }}" onsubmit="return confirm({{ t('delete_sale_confirm')|tojson }});">
+                      <input type="hidden" name="date" value="{{ report_date }}">
+                      <button class="button red" type="submit">{{ t('delete') }}</button>
+                    </form>
+                  </td>
                 {% endif %}
               </tr>
             {% else %}
-              <tr><td colspan="9">{{ t('no_sales') }}</td></tr>
+              <tr><td colspan="10">{{ t('no_sales') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

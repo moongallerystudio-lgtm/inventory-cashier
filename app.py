@@ -109,6 +109,9 @@ TRANSLATIONS = {
         "download_excel": "下载 Excel",
         "download_csv": "下载 CSV",
         "no_sales": "当天暂无销售记录",
+        "delete_sale_confirm": "确认删除这张销售单？库存会自动加回。",
+        "sale_deleted": "销售单已删除，库存已恢复",
+        "sale_not_found": "未找到销售单",
         "new_member": "新增会员",
         "member_list": "会员列表",
         "member_name": "会员姓名",
@@ -204,6 +207,9 @@ TRANSLATIONS = {
         "download_excel": "Download Excel",
         "download_csv": "Download CSV",
         "no_sales": "No sales records for this date",
+        "delete_sale_confirm": "Delete this sale? Stock will be restored.",
+        "sale_deleted": "Sale deleted and stock restored",
+        "sale_not_found": "Sale not found",
         "new_member": "New Member",
         "member_list": "Member List",
         "member_name": "Member Name",
@@ -299,6 +305,9 @@ TRANSLATIONS = {
         "download_excel": "Excel ダウンロード",
         "download_csv": "CSV ダウンロード",
         "no_sales": "この日の売上記録はありません",
+        "delete_sale_confirm": "この売上を削除しますか？在庫は自動で戻ります。",
+        "sale_deleted": "売上を削除し、在庫を戻しました",
+        "sale_not_found": "売上が見つかりません",
         "new_member": "新規会員",
         "member_list": "会員一覧",
         "member_name": "会員名",
@@ -1083,6 +1092,24 @@ def sales():
         summary=summary,
         report_date=report_date.strftime("%Y-%m-%d"),
     )
+
+
+@app.route("/sales/delete/<int:sale_id>", methods=["POST"])
+def sales_delete(sale_id):
+    sale = Sale.query.get(sale_id)
+    report_date = request.form.get("date", "")
+    if sale:
+        report_date = sale.created_at.strftime("%Y-%m-%d")
+        for item in sale.items:
+            product = Product.query.get(item.barcode)
+            if product:
+                product.stock += item.qty
+        db.session.delete(sale)
+        db.session.commit()
+        flash(translate("sale_deleted"), "success")
+    else:
+        flash(translate("sale_not_found"), "error")
+    return redirect(url_for("sales", date=report_date))
 
 
 @app.route("/sales/export/<fmt>")
