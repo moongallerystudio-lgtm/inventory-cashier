@@ -42,7 +42,7 @@ LANGUAGES = {
 
 TRANSLATIONS = {
     "zh": {
-        "app_name": "库存管理与收银系统",
+        "app_name": "mooon shop 库存管理与收银系统",
         "home": "返回首页",
         "inventory": "库存管理",
         "cashier": "收银结账",
@@ -140,7 +140,7 @@ TRANSLATIONS = {
         "no_image": "无图",
     },
     "en": {
-        "app_name": "Inventory POS System",
+        "app_name": "mooon shop Inventory POS System",
         "home": "Home",
         "inventory": "Inventory",
         "cashier": "Cashier",
@@ -238,7 +238,7 @@ TRANSLATIONS = {
         "no_image": "No Image",
     },
     "ja": {
-        "app_name": "在庫管理・レジシステム",
+        "app_name": "mooon shop 在庫管理・レジシステム",
         "home": "ホーム",
         "inventory": "在庫管理",
         "cashier": "レジ会計",
