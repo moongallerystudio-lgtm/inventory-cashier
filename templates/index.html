@@ -2,36 +2,66 @@
 <html lang="{{ current_lang() }}">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>{{ t('app_name') }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8Xedv6gH6p9YxQpggD3Elo+urV7rV4p5A2aYW+Lmzl0QWvssQeCNSi82im5UwG2bKrw0P5VxE5QxQ3s6g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background: #f4f4f4; }
-    .card { background: #fff; padding: 20px; border-radius: 8px; max-width: 760px; margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-    a.button { display: inline-block; margin: 8px 0; padding: 12px 18px; background: #007bff; color: #fff; text-decoration: none; border-radius: 6px; }
-    .language-switch { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
-    .lang-link { padding: 6px 10px; border-radius: 6px; color: #1f2937; background: #eef2f7; text-decoration: none; }
-    .lang-link.active { background: #007bff; color: #fff; }
-    h1 { margin-top: 0; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-height: 100%; overflow-x: hidden; }
+    body { font-family: Arial, sans-serif; background: #f5f7fa; color: #1f2937; margin: 0; line-height: 1.6; }
+    .page { width: 100%; max-width: 100vw; min-height: 100vh; padding: 18px; overflow-x: hidden; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    h1, h2, p { margin-top: 0; }
+    h1 { font-size: 28px; line-height: 1.2; margin-bottom: 0; }
+    h2 { font-size: 18px; }
+    .panel { min-width: 0; background: #fff; border: 1px solid #dde5ee; border-radius: 8px; padding: 16px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.06); margin-bottom: 16px; }
+    .button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 18px 0; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border-radius: 8px; text-decoration: none; color: #fff; background: #2563eb; border: none; cursor: pointer; font-weight: 700; font-size: 16px; white-space: nowrap; }
+    .button.gray { background: #475569; }
+    .feature-list { padding-left: 22px; margin-bottom: 0; }
+    .lan-address { overflow-wrap: anywhere; word-break: break-word; }
+    .language-switch { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .lang-link { padding: 8px 10px; border-radius: 8px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
+    .lang-link.active { background: #2563eb; color: #fff; }
+    @media (max-width: 760px) {
+      .page { padding: 8px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .topbar > div, .language-switch { width: 100%; }
+      .lang-link { flex: 1; text-align: center; }
+      .panel { padding: 12px; }
+      h1 { font-size: 24px; }
+      .button-grid { grid-template-columns: 1fr; }
+      .button { width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    {{ language_switch() }}
-    <h1>{{ t('app_name') }}</h1>
-    <p>{{ t('home_intro') }}</p>
-    <ul>
-      <li>{{ t('home_feature_inventory') }}</li>
-      <li>{{ t('home_feature_cashier') }}</li>
-      <li>{{ t('home_feature_stock') }}</li>
-    </ul>
-    <p>
+  <div class="page">
+    <div class="topbar">
+      <h1>{{ t('app_name') }}</h1>
+      <div>
+        {{ language_switch() }}
+      </div>
+    </div>
+    <section class="panel">
+      <p>{{ t('home_intro') }}</p>
+      <ul class="feature-list">
+        <li>{{ t('home_feature_inventory') }}</li>
+        <li>{{ t('home_feature_cashier') }}</li>
+        <li>{{ t('home_feature_stock') }}</li>
+      </ul>
+    </section>
+    <nav class="panel button-grid" aria-label="Main navigation">
       <a class="button" href="/manage">{{ t('inventory') }}</a>
       <a class="button" href="/cashier">{{ t('cashier') }}</a>
       <a class="button" href="/customer-display">{{ t('customer_display') }}</a>
       <a class="button" href="/members">{{ t('members') }}</a>
       <a class="button" href="/sales">{{ t('sales') }}</a>
-    </p>
-    <p>{{ t('lan_hint') }} <strong>http://{{ host }}</strong></p>
-    <p>{{ t('lan_help') }}</p>
+    </nav>
+    <section class="panel">
+      <p>{{ t('lan_hint') }} <strong class="lan-address">http://{{ host }}</strong></p>
+      <p>{{ t('lan_help') }}</p>
+    </section>
   </div>
 </body>
 </html>
