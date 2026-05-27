@@ -100,17 +100,19 @@
           <tbody>
             {% for row in rows %}
               <tr>
-                <td>#{{ row.sale_id }}</td>
-                <td>{{ row.created_at }}</td>
-                <td>{{ row.payment_method }}</td>
-                <td>
-                  {% if row.member_name %}
-                    {{ row.member_name }}<br>
-                    <span class="muted">{{ row.member_id }} / {{ row.discount }}%</span>
-                  {% else %}
-                    <span class="muted">{{ t('none') }}</span>
-                  {% endif %}
-                </td>
+                {% if row.item_index == 0 %}
+                  <td rowspan="{{ row.item_count }}">#{{ row.sale_no }}</td>
+                  <td rowspan="{{ row.item_count }}">{{ row.created_at }}</td>
+                  <td rowspan="{{ row.item_count }}">{{ row.payment_method }}</td>
+                  <td rowspan="{{ row.item_count }}">
+                    {% if row.member_name %}
+                      {{ row.member_name }}<br>
+                      <span class="muted">{{ row.member_id }} / {{ row.discount }}%</span>
+                    {% else %}
+                      <span class="muted">{{ t('none') }}</span>
+                    {% endif %}
+                  </td>
+                {% endif %}
                 <td>
                   {{ row.name }}<br>
                   <span class="muted">{{ row.barcode }}</span>
@@ -118,7 +120,9 @@
                 <td>¥{{ row.price|jpy }}</td>
                 <td>{{ row.qty }}</td>
                 <td>¥{{ row.subtotal|jpy }}</td>
-                <td>¥{{ row.order_payable|jpy }}</td>
+                {% if row.item_index == 0 %}
+                  <td rowspan="{{ row.item_count }}">¥{{ row.order_payable|jpy }}</td>
+                {% endif %}
               </tr>
             {% else %}
               <tr><td colspan="9">{{ t('no_sales') }}</td></tr>

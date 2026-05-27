@@ -10,6 +10,7 @@ import json
 import mimetypes
 import socket
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
 import openpyxl
 from markupsafe import Markup
 
@@ -19,6 +20,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-for-production
 BASE = Path(__file__).resolve().parent
 UPLOADS_DIR = BASE / "static" / "uploads"
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
+APP_TIMEZONE = ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Tokyo"))
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if DATABASE_URL:
@@ -468,6 +470,10 @@ def format_jpy(value):
 app.jinja_env.filters["jpy"] = format_jpy
 
 
+def local_now():
+    return datetime.now(APP_TIMEZONE).replace(tzinfo=None)
+
+
 def language_switch():
     current = get_language()
     back = request.full_path if request.query_string else request.path
@@ -684,7 +690,7 @@ def display_payload(items=None, total=0, status="active", checkout_id=None):
         "items": items or [],
         "total": round(total or 0),
         "status": status,
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": local_now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     if checkout_id is not None:
         payload["checkout_id"] = checkout_id
@@ -697,7 +703,7 @@ def save_customer_display(payload):
         state = CustomerDisplayState(id=1)
         db.session.add(state)
     state.payload = json.dumps(payload, ensure_ascii=False)
-    state.updated_at = datetime.now()
+    state.updated_at = local_now()
     db.session.commit()
     return payload
 
@@ -720,7 +726,7 @@ def get_customer_display_payload():
     payload.setdefault("status", "idle")
     payload.setdefault("checkout_id", None)
     payload.setdefault("updated_at", state.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
-    if payload.get("status") == "paid" and (datetime.now() - state.updated_at).total_seconds() > 7:
+    if payload.get("status") == "paid" and (local_now() - state.updated_at).total_seconds() > 7:
         return save_customer_display(display_payload(status="idle"))
     return payload
 
@@ -747,7 +753,7 @@ def parse_report_date(value):
             return datetime.strptime(value, "%Y-%m-%d").date()
         except ValueError:
             pass
-    return datetime.now().date()
+    return local_now().date()
 
 
 def sales_for_date(report_date):
@@ -763,10 +769,22 @@ def sales_for_date(report_date):
 
 def sale_rows(sales):
     rows = []
+    daily_numbers = {
+        sale.id: index
+        for index, sale in enumerate(
+            sorted(sales, key=lambda item: (item.created_at, item.id)),
+            start=1,
+        )
+    }
     for sale in sales:
-        for item in sale.items:
+        items = list(sale.items)
+        item_count = len(items)
+        for item_index, item in enumerate(items):
             rows.append({
                 "sale_id": sale.id,
+                "sale_no": daily_numbers.get(sale.id, sale.id),
+                "item_index": item_index,
+                "item_count": item_count,
                 "created_at": sale.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 "member_id": sale.member_id or "",
                 "member_name": sale.member_name or "",
@@ -1054,7 +1072,7 @@ def sales():
     rows = sale_rows(sales)
     summary = {
         "orders": len(sales),
-        "items": sum(row["qty"] for row in rows),
+        "items": sum(item.qty for sale in sales for item in sale.items),
         "total": round(sum(sale.total for sale in sales)),
         "payable": round(sum(sale.payable for sale in sales)),
     }
@@ -1073,14 +1091,14 @@ def sales_export(fmt):
     sales = sales_for_date(report_date)
     rows = sale_rows(sales)
     headers = [
-        "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
+        "sale_no", "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
         "barcode", "name", "price", "qty", "subtotal", "order_total", "order_payable",
     ]
     filename_date = report_date.strftime("%Y%m%d")
 
     if fmt == "csv":
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=headers)
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
         data = output.getvalue().encode("utf-8-sig")
@@ -1251,7 +1269,7 @@ def api_checkout():
     total = round(total)
     payable = calculate_payable(total, member)
     sale = Sale(
-        created_at=datetime.now(),
+        created_at=local_now(),
         member_id=member.member_id if member else None,
         member_name=member.name if member else None,
         discount=member.discount if member else 0,
