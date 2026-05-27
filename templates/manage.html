@@ -22,11 +22,15 @@
     .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
     .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px; }
     .form-row label { display: flex; flex-direction: column; font-weight: 600; }
-    input[type=text], input[type=number], input[type=file] { width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: #fff; }
+    .search-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-top: 12px; }
+    .search-row label { display: flex; flex-direction: column; font-weight: 600; }
+    input[type=text], input[type=number], input[type=file], input[type=search] { width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: #fff; }
     .table-wrap { min-width: 0; overflow-x: auto; margin-top: 12px; border: 1px solid #dde5ee; border-radius: 8px; -webkit-overflow-scrolling: touch; }
+    .inventory-table-wrap { max-height: 925px; overflow: auto; }
     table { width: 100%; min-width: 720px; border-collapse: collapse; }
     th, td { padding: 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: middle; }
     th { background: #f1f5f9; color: #334155; font-size: 14px; }
+    .inventory-table-wrap th { position: sticky; top: 0; z-index: 1; }
     tr:last-child td { border-bottom: none; }
     .product-image { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: #eef2f7; }
     .alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; }
@@ -45,8 +49,9 @@
       .panel { padding: 12px; }
       h1 { font-size: 24px; }
       .toolbar { width: 100%; }
-      .form-row { grid-template-columns: 1fr; }
+      .form-row, .search-row { grid-template-columns: 1fr; }
       .button { width: 100%; }
+      .inventory-table-wrap { max-height: 685px; }
       table { min-width: 0; table-layout: fixed; }
       th, td { padding: 8px 6px; font-size: 13px; word-break: break-word; }
       th { font-size: 12px; }
@@ -102,14 +107,18 @@
       </div>
       <div class="panel">
         <h2>{{ t('current_inventory') }}</h2>
-        <div class="table-wrap">
+        <div class="search-row">
+          <label>{{ t('product_search') }}<input id="inventorySearch" type="search" autocomplete="off" placeholder="{{ t('product_search_placeholder') }}"></label>
+          <button class="button gray" type="button" id="clearInventorySearch">{{ t('clear') }}</button>
+        </div>
+        <div class="table-wrap inventory-table-wrap">
           <table>
             <thead>
               <tr><th>{{ t('barcode') }}</th><th>{{ t('product') }}</th><th>{{ t('image') }}</th><th>{{ t('price') }}</th><th>{{ t('stock') }}</th><th>{{ t('action') }}</th></tr>
             </thead>
-            <tbody>
+            <tbody id="inventoryTableBody">
               {% for product in inventory %}
-                <tr>
+                <tr class="inventory-row" data-search="{{ (product.name ~ ' ' ~ product.barcode)|lower }}">
                   <td>{{ product.barcode }}</td>
                   <td>{{ product.name }}</td>
                   <td>{% if product.image_url %}<img class="product-image" src="{{ product.image_url }}" alt="{{ product.name }}" onerror="this.onerror=null;this.src='/static/logo.jpg';">{% else %}-{% endif %}</td>
@@ -122,8 +131,9 @@
                   </td>
                 </tr>
               {% else %}
-                <tr><td colspan="6">{{ t('no_products') }}</td></tr>
+                <tr class="inventory-empty-row"><td colspan="6">{{ t('no_products') }}</td></tr>
               {% endfor %}
+              <tr id="inventoryNoMatchRow" style="display:none;"><td colspan="6">{{ t('no_products_found') }}</td></tr>
             </tbody>
           </table>
         </div>

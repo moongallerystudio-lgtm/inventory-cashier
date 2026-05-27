@@ -707,6 +707,25 @@ function renderProductResults(products) {
   if (status) status.textContent = tr('foundProducts', '找到 {count} 个商品。', { count: products.length });
 }
 
+function filterInventoryTable() {
+  const input = document.getElementById('inventorySearch');
+  const rows = Array.from(document.querySelectorAll('.inventory-row'));
+  const noMatchRow = document.getElementById('inventoryNoMatchRow');
+  const keyword = input ? input.value.trim().toLowerCase() : '';
+  let visibleCount = 0;
+
+  for (const row of rows) {
+    const haystack = row.dataset.search || row.textContent.toLowerCase();
+    const visible = !keyword || haystack.includes(keyword);
+    row.style.display = visible ? '' : 'none';
+    if (visible) visibleCount += 1;
+  }
+
+  if (noMatchRow) {
+    noMatchRow.style.display = rows.length > 0 && visibleCount === 0 ? '' : 'none';
+  }
+}
+
 async function searchProducts() {
   const input = document.getElementById('productSearch');
   const status = document.getElementById('productSearchStatus');
@@ -918,5 +937,27 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
     searchProducts();
+  }
+
+  const inventorySearch = document.getElementById('inventorySearch');
+  if (inventorySearch) {
+    inventorySearch.addEventListener('input', filterInventoryTable);
+    inventorySearch.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        filterInventoryTable();
+      }
+    });
+  }
+
+  const clearInventorySearch = document.getElementById('clearInventorySearch');
+  if (clearInventorySearch) {
+    clearInventorySearch.addEventListener('click', function() {
+      if (inventorySearch) {
+        inventorySearch.value = '';
+        inventorySearch.focus();
+      }
+      filterInventoryTable();
+    });
   }
 });
