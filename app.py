@@ -1072,7 +1072,7 @@ def sales():
     rows = sale_rows(sales)
     summary = {
         "orders": len(sales),
-        "items": sum(item.qty for sale in sales for item in sale.items),
+        "sold_items": sum(item.qty for sale in sales for item in sale.items),
         "total": round(sum(sale.total for sale in sales)),
         "payable": round(sum(sale.payable for sale in sales)),
     }
