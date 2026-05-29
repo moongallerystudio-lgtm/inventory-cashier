@@ -32,6 +32,7 @@
     th { background: #f1f5f9; color: #334155; font-size: 14px; }
     .inventory-table-wrap th { position: sticky; top: 0; z-index: 1; }
     tr:last-child td { border-bottom: none; }
+    .action-cell { display: flex; gap: 8px; flex-wrap: wrap; }
     .product-image { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: #eef2f7; }
     .alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; }
     .alert.error { background: #ffe2e6; color: #9a161b; }
@@ -55,6 +56,7 @@
       table { min-width: 0; table-layout: fixed; }
       th, td { padding: 8px 6px; font-size: 13px; word-break: break-word; }
       th { font-size: 12px; }
+      .action-cell, .action-cell form { flex-direction: column; width: 100%; }
       .product-image { width: 48px; height: 48px; }
     }
   </style>
@@ -76,19 +78,22 @@
           {% endfor %}
         {% endif %}
       {% endwith %}
-      <div class="panel">
+      <div class="panel" id="productFormPanel">
         <h2>{{ t('edit_product') }}</h2>
-        <form method="post" action="/manage/add" enctype="multipart/form-data">
+        <form id="productForm" method="post" action="/manage/add" enctype="multipart/form-data">
           <div class="form-row">
             <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" required></label>
-            <label>{{ t('product_name') }}<input type="text" name="name" placeholder="{{ t('product_name') }}" required></label>
-            <label>{{ t('price') }}<input type="number" name="price" step="1" placeholder="120" required></label>
-            <label>{{ t('stock') }}<input type="number" name="stock" step="1" placeholder="100" required></label>
+            <label>{{ t('product_name') }}<input type="text" name="name" id="productName" placeholder="{{ t('product_name') }}" required></label>
+            <label>{{ t('price') }}<input type="number" name="price" id="productPrice" step="1" placeholder="120" required></label>
+            <label>{{ t('stock') }}<input type="number" name="stock" id="productStock" step="1" placeholder="100" required></label>
           </div>
           <div class="form-row">
-            <label>{{ t('image') }}<input type="file" name="image" accept="image/*"></label>
+            <label>{{ t('image') }}<input type="file" name="image" id="productImage" accept="image/*"></label>
           </div>
-          <button class="button" type="submit">{{ t('save_product') }}</button>
+          <div class="toolbar">
+            <button class="button" type="submit">{{ t('save_product') }}</button>
+            <button class="button gray" type="button" id="resetProductForm">{{ t('clear') }}</button>
+          </div>
         </form>
       </div>
       <div class="panel">
@@ -125,9 +130,16 @@
                   <td>¥{{ product.price|jpy }}</td>
                   <td>{{ product.stock }}</td>
                   <td>
+                    <div class="action-cell">
+                    <button
+                      class="button green"
+                      type="button"
+                      onclick="editInventoryProduct({{ product.barcode|tojson }}, {{ product.name|tojson }}, {{ product.price|tojson }}, {{ product.stock|tojson }})"
+                    >{{ t('edit') }}</button>
                     <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm('确认删除？');">
                       <button class="button red" type="submit">{{ t('delete') }}</button>
                     </form>
+                    </div>
                   </td>
                 </tr>
               {% else %}

@@ -726,6 +726,36 @@ function filterInventoryTable() {
   }
 }
 
+function resetInventoryProductForm() {
+  const form = document.getElementById('productForm');
+  const barcodeInput = document.getElementById('barcode');
+  if (form) form.reset();
+  if (barcodeInput) {
+    barcodeInput.readOnly = false;
+    barcodeInput.focus();
+  }
+}
+
+function editInventoryProduct(barcode, name, price, stock) {
+  const barcodeInput = document.getElementById('barcode');
+  const nameInput = document.getElementById('productName');
+  const priceInput = document.getElementById('productPrice');
+  const stockInput = document.getElementById('productStock');
+  const imageInput = document.getElementById('productImage');
+  const formPanel = document.getElementById('productFormPanel');
+
+  if (barcodeInput) {
+    barcodeInput.value = barcode;
+    barcodeInput.readOnly = true;
+  }
+  if (nameInput) nameInput.value = name;
+  if (priceInput) priceInput.value = formatJpy(price);
+  if (stockInput) stockInput.value = stock;
+  if (imageInput) imageInput.value = '';
+  if (formPanel) formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (nameInput) nameInput.focus();
+}
+
 async function searchProducts() {
   const input = document.getElementById('productSearch');
   const status = document.getElementById('productSearchStatus');
@@ -959,5 +989,10 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       filterInventoryTable();
     });
+  }
+
+  const resetProductForm = document.getElementById('resetProductForm');
+  if (resetProductForm) {
+    resetProductForm.addEventListener('click', resetInventoryProductForm);
   }
 });
