@@ -82,17 +82,17 @@
         <h2>{{ t('edit_product') }}</h2>
         <form id="productForm" method="post" action="/manage/add" enctype="multipart/form-data">
           <div class="form-row">
-            <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" required></label>
-            <label>{{ t('product_name') }}<input type="text" name="name" id="productName" placeholder="{{ t('product_name') }}" required></label>
-            <label>{{ t('price') }}<input type="number" name="price" id="productPrice" step="1" placeholder="120" required></label>
-            <label>{{ t('stock') }}<input type="number" name="stock" id="productStock" step="1" placeholder="100" required></label>
+            <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" value="{{ edit_product.barcode if edit_product else '' }}" {% if edit_product %}readonly{% endif %} required></label>
+            <label>{{ t('product_name') }}<input type="text" name="name" id="productName" placeholder="{{ t('product_name') }}" value="{{ edit_product.name if edit_product else '' }}" required></label>
+            <label>{{ t('price') }}<input type="number" name="price" id="productPrice" step="1" placeholder="120" value="{{ edit_product.price|jpy if edit_product else '' }}" required></label>
+            <label>{{ t('stock') }}<input type="number" name="stock" id="productStock" step="1" placeholder="100" value="{{ edit_product.stock if edit_product else '' }}" required></label>
           </div>
           <div class="form-row">
             <label>{{ t('image') }}<input type="file" name="image" id="productImage" accept="image/*"></label>
           </div>
           <div class="toolbar">
             <button class="button" type="submit">{{ t('save_product') }}</button>
-            <button class="button gray" type="button" id="resetProductForm">{{ t('clear') }}</button>
+            <a class="button gray" href="/manage#productFormPanel">{{ t('clear') }}</a>
           </div>
         </form>
       </div>
@@ -131,11 +131,7 @@
                   <td>{{ product.stock }}</td>
                   <td>
                     <div class="action-cell">
-                    <button
-                      class="button green"
-                      type="button"
-                      onclick="editInventoryProduct({{ product.barcode|tojson }}, {{ product.name|tojson }}, {{ product.price|tojson }}, {{ product.stock|tojson }})"
-                    >{{ t('edit') }}</button>
+                    <a class="button green" href="/manage?edit={{ product.barcode|urlencode }}#productFormPanel">{{ t('edit') }}</a>
                     <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm({{ t('delete_product_confirm')|tojson }});">
                       <button class="button red" type="submit">{{ t('delete') }}</button>
                     </form>
@@ -159,45 +155,7 @@
       </div>
   </div>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script>
-    function resetInventoryProductForm() {
-      const form = document.getElementById('productForm');
-      const barcodeInput = document.getElementById('barcode');
-      if (form) form.reset();
-      if (barcodeInput) {
-        barcodeInput.readOnly = false;
-        barcodeInput.focus();
-      }
-    }
-
-    function editInventoryProduct(barcode, name, price, stock) {
-      const barcodeInput = document.getElementById('barcode');
-      const nameInput = document.getElementById('productName');
-      const priceInput = document.getElementById('productPrice');
-      const stockInput = document.getElementById('productStock');
-      const imageInput = document.getElementById('productImage');
-      const formPanel = document.getElementById('productFormPanel');
-
-      if (barcodeInput) {
-        barcodeInput.value = barcode;
-        barcodeInput.readOnly = true;
-      }
-      if (nameInput) nameInput.value = name;
-      if (priceInput) priceInput.value = Math.round(Number(price) || 0);
-      if (stockInput) stockInput.value = stock;
-      if (imageInput) imageInput.value = '';
-      if (formPanel) formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      if (nameInput) nameInput.focus();
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-      const resetProductForm = document.getElementById('resetProductForm');
-      if (resetProductForm) {
-        resetProductForm.addEventListener('click', resetInventoryProductForm);
-      }
-    });
-  </script>
-  <script src="/static/main.js?v=20260529-inventory-edit"></script>
+  <script src="/static/main.js?v=20260529-inventory-edit-server"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->

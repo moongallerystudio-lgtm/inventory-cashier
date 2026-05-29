@@ -936,7 +936,9 @@ def product_image(barcode):
 @app.route("/manage")
 def manage():
     inventory = load_inventory()
-    return render_template("manage.html", inventory=inventory)
+    edit_barcode = request.args.get("edit", "").strip()
+    edit_product = find_product(edit_barcode) if edit_barcode else None
+    return render_template("manage.html", inventory=inventory, edit_product=edit_product)
 
 
 @app.route("/manage/add", methods=["POST"])
