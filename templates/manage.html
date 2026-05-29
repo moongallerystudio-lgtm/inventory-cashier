@@ -132,9 +132,7 @@
                   <td>
                     <div class="action-cell">
                     <a class="button green" href="/manage?edit={{ product.barcode|urlencode }}#productFormPanel">{{ t('edit') }}</a>
-                    <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm({{ t('delete_product_confirm')|tojson }});">
-                      <button class="button red" type="submit">{{ t('delete') }}</button>
-                    </form>
+                    <a class="button red" href="/manage/delete/{{ product.barcode|urlencode }}/confirm">{{ t('delete') }}</a>
                     </div>
                   </td>
                 </tr>

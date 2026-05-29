@@ -121,6 +121,10 @@ TRANSLATIONS = {
         "sale_deleted": "销售单已删除，库存已恢复",
         "sale_not_found": "未找到销售单",
         "delete_product_confirm": "确认删除这个商品？",
+        "confirm_delete_product": "确认删除商品",
+        "confirm_delete_hint": "删除后无法恢复，请确认是否继续。",
+        "confirm_delete": "确认删除",
+        "cancel": "取消",
         "delete_member_confirm": "确认删除这个会员？",
         "remove_item_confirm": "确认从购物车移除这个商品？",
         "new_member": "新增会员",
@@ -223,6 +227,10 @@ TRANSLATIONS = {
         "sale_deleted": "Sale deleted and stock restored",
         "sale_not_found": "Sale not found",
         "delete_product_confirm": "Delete this product?",
+        "confirm_delete_product": "Confirm Product Deletion",
+        "confirm_delete_hint": "This cannot be undone. Please confirm before continuing.",
+        "confirm_delete": "Confirm Delete",
+        "cancel": "Cancel",
         "delete_member_confirm": "Delete this member?",
         "remove_item_confirm": "Remove this item from the cart?",
         "new_member": "New Member",
@@ -325,6 +333,10 @@ TRANSLATIONS = {
         "sale_deleted": "売上を削除し、在庫を戻しました",
         "sale_not_found": "売上が見つかりません",
         "delete_product_confirm": "この商品を削除しますか？",
+        "confirm_delete_product": "商品削除の確認",
+        "confirm_delete_hint": "削除後は元に戻せません。続行する前に確認してください。",
+        "confirm_delete": "削除する",
+        "cancel": "キャンセル",
         "delete_member_confirm": "この会員を削除しますか？",
         "remove_item_confirm": "この商品をカートから削除しますか？",
         "new_member": "新規会員",
@@ -983,6 +995,15 @@ def manage_add():
     update_product(product)
     flash("商品已保存", "success")
     return redirect(url_for("manage"))
+
+
+@app.route("/manage/delete/<barcode>/confirm")
+def manage_delete_confirm(barcode):
+    product = Product.query.get(barcode)
+    if not product:
+        flash("商品不存在", "error")
+        return redirect(url_for("manage"))
+    return render_template("confirm_delete_product.html", product=product)
 
 
 @app.route("/manage/delete/<barcode>", methods=["POST"])

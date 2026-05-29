@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang() }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ t('confirm_delete_product') }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f7fa; color: #1f2937; margin: 0; padding: 18px; }
+    .page { max-width: 720px; margin: 0 auto; }
+    .panel { background: #fff; border: 1px solid #dde5ee; border-radius: 8px; padding: 18px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.06); }
+    h1 { margin: 0 0 14px; font-size: 26px; }
+    .product { background: #f8fafc; border: 1px solid #dde5ee; border-radius: 8px; padding: 14px; margin: 14px 0; }
+    .muted { color: #64748b; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border-radius: 8px; text-decoration: none; color: #fff; background: #2563eb; border: none; cursor: pointer; font-weight: 700; font-size: 16px; }
+    .button.red { background: #dc2626; }
+    .button.gray { background: #475569; }
+    @media (max-width: 760px) {
+      body { padding: 8px; }
+      .button, .actions form { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="panel">
+      <h1>{{ t('confirm_delete_product') }}</h1>
+      <p>{{ t('confirm_delete_hint') }}</p>
+      <div class="product">
+        <strong>{{ product.name }}</strong><br>
+        <span class="muted">{{ t('barcode') }}: {{ product.barcode }}</span><br>
+        <span class="muted">{{ t('price') }}: ¥{{ product.price|jpy }} / {{ t('stock') }}: {{ product.stock }}</span>
+      </div>
+      <div class="actions">
+        <form method="post" action="/manage/delete/{{ product.barcode }}">
+          <button class="button red" type="submit">{{ t('confirm_delete') }}</button>
+        </form>
+        <a class="button gray" href="/manage">{{ t('cancel') }}</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
