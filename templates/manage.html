@@ -159,7 +159,45 @@
       </div>
   </div>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js"></script>
+  <script>
+    function resetInventoryProductForm() {
+      const form = document.getElementById('productForm');
+      const barcodeInput = document.getElementById('barcode');
+      if (form) form.reset();
+      if (barcodeInput) {
+        barcodeInput.readOnly = false;
+        barcodeInput.focus();
+      }
+    }
+
+    function editInventoryProduct(barcode, name, price, stock) {
+      const barcodeInput = document.getElementById('barcode');
+      const nameInput = document.getElementById('productName');
+      const priceInput = document.getElementById('productPrice');
+      const stockInput = document.getElementById('productStock');
+      const imageInput = document.getElementById('productImage');
+      const formPanel = document.getElementById('productFormPanel');
+
+      if (barcodeInput) {
+        barcodeInput.value = barcode;
+        barcodeInput.readOnly = true;
+      }
+      if (nameInput) nameInput.value = name;
+      if (priceInput) priceInput.value = Math.round(Number(price) || 0);
+      if (stockInput) stockInput.value = stock;
+      if (imageInput) imageInput.value = '';
+      if (formPanel) formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (nameInput) nameInput.focus();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const resetProductForm = document.getElementById('resetProductForm');
+      if (resetProductForm) {
+        resetProductForm.addEventListener('click', resetInventoryProductForm);
+      }
+    });
+  </script>
+  <script src="/static/main.js?v=20260529-inventory-edit"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->
