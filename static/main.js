@@ -654,6 +654,7 @@ function updateCartTable(items, total) {
 }
 
 async function changeCartQty(barcode, qty) {
+  if (qty <= 0 && !confirm(tr('removeItemConfirm', '确认从购物车移除这个商品？'))) return;
   const resultEl = document.getElementById('scanResult');
   const response = await fetch(`/api/cashier/cart/${encodeURIComponent(barcode)}`, {
     method: 'PATCH',
@@ -779,6 +780,7 @@ async function addProductByBarcode(barcode) {
 }
 
 async function removeCartItem(barcode) {
+  if (!confirm(tr('removeItemConfirm', '确认从购物车移除这个商品？'))) return;
   const resultEl = document.getElementById('scanResult');
   const response = await fetch(`/api/cashier/cart/${encodeURIComponent(barcode)}`, {
     method: 'DELETE',

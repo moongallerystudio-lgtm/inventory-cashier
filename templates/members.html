@@ -95,7 +95,7 @@
                   <td>{{ member.name }}</td>
                   <td>{{ member.discount }}</td>
                   <td>
-                    <form method="post" action="/members/delete/{{ member.member_id }}" style="display:inline;" onsubmit="return confirm('确认删除会员？');">
+                    <form method="post" action="/members/delete/{{ member.member_id }}" style="display:inline;" onsubmit="return confirm({{ t('delete_member_confirm')|tojson }});">
                       <button class="button red" type="submit">{{ t('delete') }}</button>
                     </form>
                   </td>

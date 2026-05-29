@@ -136,7 +136,7 @@
                       type="button"
                       onclick="editInventoryProduct({{ product.barcode|tojson }}, {{ product.name|tojson }}, {{ product.price|tojson }}, {{ product.stock|tojson }})"
                     >{{ t('edit') }}</button>
-                    <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm('确认删除？');">
+                    <form method="post" action="/manage/delete/{{ product.barcode }}" style="display:inline;" onsubmit="return confirm({{ t('delete_product_confirm')|tojson }});">
                       <button class="button red" type="submit">{{ t('delete') }}</button>
                     </form>
                     </div>
