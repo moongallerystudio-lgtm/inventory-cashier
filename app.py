@@ -904,6 +904,35 @@ def sale_rows(sales):
     return rows
 
 
+def daily_sales_summary(sales):
+    summary = {}
+    for sale in sales:
+        key = sale.created_at.date()
+        day = summary.setdefault(key, {
+            "date": key.strftime("%Y-%m-%d"),
+            "orders": 0,
+            "sold_items": 0,
+            "original_total": 0,
+            "paid_amount": 0,
+        })
+        day["orders"] += 1
+        day["sold_items"] += sum(item.qty for item in sale.items)
+        day["original_total"] += round(sale.total or 0)
+        day["paid_amount"] += round(sale.payable or 0)
+    return [summary[key] for key in sorted(summary)]
+
+
+def sale_export_rows(rows):
+    export_rows = []
+    for row in rows:
+        export_row = dict(row)
+        if row.get("item_index", 0) > 0:
+            export_row["order_total"] = ""
+            export_row["order_payable"] = ""
+        export_rows.append(export_row)
+    return export_rows
+
+
 def parse_inventory_file(file_storage):
     filename = file_storage.filename or ""
     suffix = Path(filename).suffix.lower()
@@ -1239,10 +1268,13 @@ def sales_export(fmt):
     start_date, end_date = parse_report_range(request.args)
     sales = sales_for_range(start_date, end_date)
     rows = sale_rows(sales)
+    export_rows = sale_export_rows(rows)
+    daily_summary = daily_sales_summary(sales)
     headers = [
         "sale_no", "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
         "barcode", "name", "price", "qty", "subtotal", "order_total", "order_payable",
     ]
+    summary_headers = ["date", "orders", "sold_items", "original_total", "paid_amount"]
     filename_date = (
         start_date.strftime("%Y%m%d")
         if start_date == end_date
@@ -1253,7 +1285,7 @@ def sales_export(fmt):
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(export_rows)
         data = output.getvalue().encode("utf-8-sig")
         return send_file(
             io.BytesIO(data),
@@ -1265,10 +1297,20 @@ def sales_export(fmt):
     if fmt == "xlsx":
         workbook = openpyxl.Workbook()
         sheet = workbook.active
-        sheet.title = "Sales"
-        sheet.append(headers)
-        for row in rows:
-            sheet.append([row.get(header, "") for header in headers])
+        sheet.title = "Daily Summary"
+        sheet.append(summary_headers)
+        for row in daily_summary:
+            sheet.append([row.get(header, "") for header in summary_headers])
+
+        detail_sheet = workbook.create_sheet("Sales Details")
+        detail_sheet.append(headers)
+        for row in export_rows:
+            detail_sheet.append([row.get(header, "") for header in headers])
+
+        for worksheet in (sheet, detail_sheet):
+            for column_cells in worksheet.columns:
+                max_length = max(len(str(cell.value or "")) for cell in column_cells)
+                worksheet.column_dimensions[column_cells[0].column_letter].width = min(max_length + 2, 32)
         output = io.BytesIO()
         workbook.save(output)
         output.seek(0)
