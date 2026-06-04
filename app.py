@@ -115,6 +115,8 @@ TRANSLATIONS = {
         "sold_items": "销售件数",
         "details": "明细",
         "view_date": "查看日期",
+        "start_date": "开始日期",
+        "end_date": "结束日期",
         "download_excel": "下载 Excel",
         "download_csv": "下载 CSV",
         "no_sales": "当天暂无销售记录",
@@ -222,6 +224,8 @@ TRANSLATIONS = {
         "sold_items": "Items Sold",
         "details": "Details",
         "view_date": "View Date",
+        "start_date": "Start Date",
+        "end_date": "End Date",
         "download_excel": "Download Excel",
         "download_csv": "Download CSV",
         "no_sales": "No sales records for this date",
@@ -329,6 +333,8 @@ TRANSLATIONS = {
         "sold_items": "販売数",
         "details": "明細",
         "view_date": "日付表示",
+        "start_date": "開始日",
+        "end_date": "終了日",
         "download_excel": "Excel ダウンロード",
         "download_csv": "CSV ダウンロード",
         "no_sales": "この日の売上記録はありません",
@@ -837,9 +843,21 @@ def parse_report_date(value):
     return local_now().date()
 
 
-def sales_for_date(report_date):
-    start = datetime.combine(report_date, time.min)
-    end = datetime.combine(report_date, time.max)
+def parse_report_range(args):
+    single_date = args.get("date", "")
+    if single_date:
+        report_date = parse_report_date(single_date)
+        return report_date, report_date
+    start_date = parse_report_date(args.get("start_date", ""))
+    end_date = parse_report_date(args.get("end_date", "")) if args.get("end_date") else start_date
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    return start_date, end_date
+
+
+def sales_for_range(start_date, end_date):
+    start = datetime.combine(start_date, time.min)
+    end = datetime.combine(end_date, time.max)
     return (
         Sale.query
         .filter(Sale.created_at >= start, Sale.created_at <= end)
@@ -848,15 +866,19 @@ def sales_for_date(report_date):
     )
 
 
+def sales_for_date(report_date):
+    return sales_for_range(report_date, report_date)
+
+
 def sale_rows(sales):
     rows = []
-    daily_numbers = {
-        sale.id: index
-        for index, sale in enumerate(
-            sorted(sales, key=lambda item: (item.created_at, item.id)),
-            start=1,
-        )
-    }
+    daily_numbers = {}
+    sales_by_date = {}
+    for sale in sales:
+        sales_by_date.setdefault(sale.created_at.date(), []).append(sale)
+    for day_sales in sales_by_date.values():
+        for index, sale in enumerate(sorted(day_sales, key=lambda item: (item.created_at, item.id)), start=1):
+            daily_numbers[sale.id] = index
     for sale in sales:
         items = list(sale.items)
         item_count = len(items)
@@ -1165,8 +1187,8 @@ def api_customer_display():
 
 @app.route("/sales")
 def sales():
-    report_date = parse_report_date(request.args.get("date", ""))
-    sales = sales_for_date(report_date)
+    start_date, end_date = parse_report_range(request.args)
+    sales = sales_for_range(start_date, end_date)
     rows = sale_rows(sales)
     summary = {
         "orders": len(sales),
@@ -1179,13 +1201,22 @@ def sales():
         sales=sales,
         rows=rows,
         summary=summary,
-        report_date=report_date.strftime("%Y-%m-%d"),
+        start_date=start_date.strftime("%Y-%m-%d"),
+        end_date=end_date.strftime("%Y-%m-%d"),
+        report_date=start_date.strftime("%Y-%m-%d"),
+        report_range=(
+            start_date.strftime("%Y-%m-%d")
+            if start_date == end_date
+            else f"{start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}"
+        ),
     )
 
 
 @app.route("/sales/delete/<int:sale_id>", methods=["POST"])
 def sales_delete(sale_id):
     sale = Sale.query.get(sale_id)
+    start_date = request.form.get("start_date", "")
+    end_date = request.form.get("end_date", "")
     report_date = request.form.get("date", "")
     if sale:
         report_date = sale.created_at.strftime("%Y-%m-%d")
@@ -1198,19 +1229,25 @@ def sales_delete(sale_id):
         flash(translate("sale_deleted"), "success")
     else:
         flash(translate("sale_not_found"), "error")
+    if start_date or end_date:
+        return redirect(url_for("sales", start_date=start_date or report_date, end_date=end_date or report_date))
     return redirect(url_for("sales", date=report_date))
 
 
 @app.route("/sales/export/<fmt>")
 def sales_export(fmt):
-    report_date = parse_report_date(request.args.get("date", ""))
-    sales = sales_for_date(report_date)
+    start_date, end_date = parse_report_range(request.args)
+    sales = sales_for_range(start_date, end_date)
     rows = sale_rows(sales)
     headers = [
         "sale_no", "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
         "barcode", "name", "price", "qty", "subtotal", "order_total", "order_payable",
     ]
-    filename_date = report_date.strftime("%Y%m%d")
+    filename_date = (
+        start_date.strftime("%Y%m%d")
+        if start_date == end_date
+        else f"{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
+    )
 
     if fmt == "csv":
         output = io.StringIO()
@@ -1243,7 +1280,7 @@ def sales_export(fmt):
         )
 
     flash("不支持的导出格式", "error")
-    return redirect(url_for("sales", date=report_date.strftime("%Y-%m-%d")))
+    return redirect(url_for("sales", start_date=start_date.strftime("%Y-%m-%d"), end_date=end_date.strftime("%Y-%m-%d")))
 
 
 @app.route("/api/product/<barcode>")

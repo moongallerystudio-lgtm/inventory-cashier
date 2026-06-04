@@ -22,6 +22,7 @@
     .lang-link { padding: 8px 10px; border-radius: 8px; color: #1f2937; background: #eef2f7; text-decoration: none; font-weight: 700; }
     .lang-link.active { background: #2563eb; color: #fff; }
     .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .toolbar label { display: flex; flex-direction: column; gap: 4px; color: #64748b; font-size: 14px; font-weight: 700; }
     input[type=date] { min-height: 44px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; }
     .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .summary-box { background: #f8fafc; border: 1px solid #dde5ee; border-radius: 8px; padding: 12px; }
@@ -66,10 +67,11 @@
 
     <div class="panel">
       <form class="toolbar" method="get" action="/sales">
-        <input type="date" name="date" value="{{ report_date }}">
+        <label>{{ t('start_date') }}<input type="date" name="start_date" value="{{ start_date }}"></label>
+        <label>{{ t('end_date') }}<input type="date" name="end_date" value="{{ end_date }}"></label>
         <button class="button" type="submit">{{ t('view_date') }}</button>
-        <a class="button green" href="/sales/export/xlsx?date={{ report_date }}">{{ t('download_excel') }}</a>
-        <a class="button" href="/sales/export/csv?date={{ report_date }}">{{ t('download_csv') }}</a>
+        <a class="button green" href="/sales/export/xlsx?start_date={{ start_date }}&end_date={{ end_date }}">{{ t('download_excel') }}</a>
+        <a class="button" href="/sales/export/csv?start_date={{ start_date }}&end_date={{ end_date }}">{{ t('download_csv') }}</a>
       </form>
     </div>
 
@@ -93,7 +95,7 @@
     </div>
 
     <div class="panel">
-      <h2>{{ report_date }} {{ t('details') }}</h2>
+      <h2>{{ report_range }} {{ t('details') }}</h2>
       <div class="table-wrap">
         <table>
           <thead>
@@ -137,7 +139,8 @@
                   <td rowspan="{{ row.item_count }}">¥{{ row.order_payable|jpy }}</td>
                   <td rowspan="{{ row.item_count }}">
                     <form method="post" action="/sales/delete/{{ row.sale_id }}" onsubmit="return confirm({{ t('delete_sale_confirm')|tojson }});">
-                      <input type="hidden" name="date" value="{{ report_date }}">
+                      <input type="hidden" name="start_date" value="{{ start_date }}">
+                      <input type="hidden" name="end_date" value="{{ end_date }}">
                       <button class="button red" type="submit">{{ t('delete') }}</button>
                     </form>
                   </td>
