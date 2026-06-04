@@ -27,7 +27,7 @@
     input[type=text], input[type=number], input[type=file], input[type=search] { width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: #fff; }
     .table-wrap { min-width: 0; overflow-x: auto; margin-top: 12px; border: 1px solid #dde5ee; border-radius: 8px; -webkit-overflow-scrolling: touch; }
     .inventory-table-wrap { max-height: 925px; overflow: auto; }
-    table { width: 100%; min-width: 720px; border-collapse: collapse; }
+    table { width: 100%; min-width: 840px; border-collapse: collapse; }
     th, td { padding: 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: middle; }
     th { background: #f1f5f9; color: #334155; font-size: 14px; }
     .inventory-table-wrap th { position: sticky; top: 0; z-index: 1; }
@@ -84,6 +84,7 @@
           <div class="form-row">
             <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" value="{{ edit_product.barcode if edit_product else '' }}" {% if edit_product %}readonly{% endif %} required></label>
             <label>{{ t('product_name') }}<input type="text" name="name" id="productName" placeholder="{{ t('product_name') }}" value="{{ edit_product.name if edit_product else '' }}" required></label>
+            <label>{{ t('artist') }}<input type="text" name="artist" id="productArtist" placeholder="{{ t('artist') }}" value="{{ edit_product.artist if edit_product else '' }}"></label>
             <label>{{ t('price') }}<input type="number" name="price" id="productPrice" step="1" placeholder="120" value="{{ edit_product.price|jpy if edit_product else '' }}" required></label>
             <label>{{ t('stock') }}<input type="number" name="stock" id="productStock" step="1" placeholder="100" value="{{ edit_product.stock if edit_product else '' }}" required></label>
           </div>
@@ -119,13 +120,14 @@
         <div class="table-wrap inventory-table-wrap">
           <table>
             <thead>
-              <tr><th>{{ t('barcode') }}</th><th>{{ t('product') }}</th><th>{{ t('image') }}</th><th>{{ t('price') }}</th><th>{{ t('stock') }}</th><th>{{ t('action') }}</th></tr>
+              <tr><th>{{ t('barcode') }}</th><th>{{ t('product') }}</th><th>{{ t('artist') }}</th><th>{{ t('image') }}</th><th>{{ t('price') }}</th><th>{{ t('stock') }}</th><th>{{ t('action') }}</th></tr>
             </thead>
             <tbody id="inventoryTableBody">
               {% for product in inventory %}
-                <tr class="inventory-row" data-search="{{ (product.name ~ ' ' ~ product.barcode)|lower }}">
+                <tr class="inventory-row" data-search="{{ (product.name ~ ' ' ~ product.barcode ~ ' ' ~ product.artist)|lower }}">
                   <td>{{ product.barcode }}</td>
                   <td>{{ product.name }}</td>
+                  <td>{{ product.artist or '-' }}</td>
                   <td>{% if product.image_url %}<img class="product-image" src="{{ product.image_url }}" alt="{{ product.name }}" onerror="this.onerror=null;this.src='/static/logo.jpg';">{% else %}-{% endif %}</td>
                   <td>¥{{ product.price|jpy }}</td>
                   <td>{{ product.stock }}</td>
@@ -137,9 +139,9 @@
                   </td>
                 </tr>
               {% else %}
-                <tr class="inventory-empty-row"><td colspan="6">{{ t('no_products') }}</td></tr>
+                <tr class="inventory-empty-row"><td colspan="7">{{ t('no_products') }}</td></tr>
               {% endfor %}
-              <tr id="inventoryNoMatchRow" style="display:none;"><td colspan="6">{{ t('no_products_found') }}</td></tr>
+              <tr id="inventoryNoMatchRow" style="display:none;"><td colspan="7">{{ t('no_products_found') }}</td></tr>
             </tbody>
           </table>
         </div>

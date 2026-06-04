@@ -29,6 +29,7 @@
       <p>{{ t('confirm_delete_hint') }}</p>
       <div class="product">
         <strong>{{ product.name }}</strong><br>
+        {% if product.artist %}<span class="muted">{{ t('artist') }}: {{ product.artist }}</span><br>{% endif %}
         <span class="muted">{{ t('barcode') }}: {{ product.barcode }}</span><br>
         <span class="muted">{{ t('price') }}: ¥{{ product.price|jpy }} / {{ t('stock') }}: {{ product.stock }}</span>
       </div>

@@ -694,12 +694,15 @@ function renderProductResults(products) {
     const image = product.image_url
       ? `<img class="product-thumb" src="${escapeHtml(product.image_url)}" alt="${escapeHtml(product.name)}" onerror="this.onerror=null;this.src='/static/logo.jpg';">`
       : `<div class="product-thumb product-placeholder">${escapeHtml(tr('noImage', '无图'))}</div>`;
+    const artistLine = product.artist
+      ? `${escapeHtml(tr('artist', '艺术家'))}: ${escapeHtml(product.artist)}<br>`
+      : '';
 
     button.innerHTML = `
       ${image}
       <span>
         <span class="product-name">${escapeHtml(product.name)}</span>
-        <span class="product-meta">${formatJpyWithSymbol(product.price)} ｜ ${escapeHtml(tr('stock', '库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
+        <span class="product-meta">${artistLine}${formatJpyWithSymbol(product.price)} ｜ ${escapeHtml(tr('stock', '库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
       </span>
     `;
     container.appendChild(button);

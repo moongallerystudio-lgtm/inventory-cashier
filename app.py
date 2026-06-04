@@ -70,6 +70,7 @@ TRANSLATIONS = {
         "barcode": "条形码",
         "product": "商品",
         "product_name": "商品名称",
+        "artist": "艺术家",
         "image": "图片",
         "price": "单价",
         "stock": "库存",
@@ -91,7 +92,7 @@ TRANSLATIONS = {
         "barcode_entry": "扫码 / 输入条码",
         "barcode_placeholder": "扫码或输入条形码",
         "product_search": "商品搜索",
-        "product_search_placeholder": "搜索商品名称或条码",
+        "product_search_placeholder": "搜索商品名称、条码或艺术家",
         "search": "搜索",
         "tap_product_hint": "可直接点选商品加入购物车。",
         "member_discount": "会员折扣",
@@ -176,6 +177,7 @@ TRANSLATIONS = {
         "barcode": "Barcode",
         "product": "Product",
         "product_name": "Product Name",
+        "artist": "Artist",
         "image": "Image",
         "price": "Price",
         "stock": "Stock",
@@ -197,7 +199,7 @@ TRANSLATIONS = {
         "barcode_entry": "Scan / Enter Barcode",
         "barcode_placeholder": "Scan or enter barcode",
         "product_search": "Product Search",
-        "product_search_placeholder": "Search name or barcode",
+        "product_search_placeholder": "Search name, barcode, or artist",
         "search": "Search",
         "tap_product_hint": "Tap a product to add it to the cart.",
         "member_discount": "Member Discount",
@@ -282,6 +284,7 @@ TRANSLATIONS = {
         "barcode": "バーコード",
         "product": "商品",
         "product_name": "商品名",
+        "artist": "アーティスト",
         "image": "画像",
         "price": "単価",
         "stock": "在庫",
@@ -303,7 +306,7 @@ TRANSLATIONS = {
         "barcode_entry": "スキャン / バーコード入力",
         "barcode_placeholder": "バーコードをスキャンまたは入力",
         "product_search": "商品検索",
-        "product_search_placeholder": "商品名またはバーコードを検索",
+        "product_search_placeholder": "商品名・バーコード・アーティストを検索",
         "search": "検索",
         "tap_product_hint": "商品をタップしてカートに追加できます。",
         "member_discount": "会員割引",
@@ -384,6 +387,7 @@ class Product(db.Model):
     __tablename__ = "products"
     barcode = db.Column(db.String(128), primary_key=True)
     name = db.Column(db.String(256), nullable=False)
+    artist = db.Column(db.String(256), nullable=False, default="")
     price = db.Column(db.Float, nullable=False, default=0.0)
     stock = db.Column(db.Integer, nullable=False, default=0)
     image = db.Column(db.String(512), nullable=True)
@@ -395,6 +399,7 @@ class Product(db.Model):
         return {
             "barcode": self.barcode,
             "name": self.name,
+            "artist": self.artist or "",
             "price": self.price,
             "stock": self.stock,
             "image": self.image,
@@ -456,6 +461,8 @@ def ensure_schema():
     table_names = inspector.get_table_names()
     if "products" in table_names:
         product_columns = {column["name"] for column in inspector.get_columns("products")}
+        if "artist" not in product_columns:
+            db.session.execute(text("ALTER TABLE products ADD COLUMN artist VARCHAR(256) NOT NULL DEFAULT ''"))
         if "image_data" not in product_columns:
             image_data_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
             db.session.execute(text(f"ALTER TABLE products ADD COLUMN image_data {image_data_type}"))
@@ -549,20 +556,20 @@ def load_inventory():
 
 
 def save_inventory(data):
-    Product.query.delete()
     for item in data:
         try:
-            product = Product(
-                barcode=str(item.get("barcode", "") or "").strip(),
-                name=str(item.get("name", "") or "").strip(),
-                price=float(item.get("price", 0) or 0),
-                stock=int(item.get("stock", 0) or 0),
-                image=str(item.get("image", "") or None) if item.get("image") else None,
-            )
+            product_data = {
+                "barcode": str(item.get("barcode", "") or "").strip(),
+                "name": str(item.get("name", "") or "").strip(),
+                "artist": str(item.get("artist", "") or "").strip(),
+                "price": float(item.get("price", 0) or 0),
+                "stock": int(item.get("stock", 0) or 0),
+                "image": str(item.get("image", "") or None) if item.get("image") else None,
+            }
         except (ValueError, TypeError):
             continue
-        db.session.add(product)
-    db.session.commit()
+        if product_data["barcode"] and product_data["name"]:
+            update_product(product_data)
 
 
 def load_members():
@@ -675,6 +682,7 @@ def update_product(product):
     existing = Product.query.get(product["barcode"])
     if existing:
         existing.name = product["name"]
+        existing.artist = product.get("artist", "") or ""
         existing.price = product["price"]
         existing.stock = product["stock"]
         existing.image = product.get("image")
@@ -685,6 +693,7 @@ def update_product(product):
         existing = Product(
             barcode=product["barcode"],
             name=product["name"],
+            artist=product.get("artist", "") or "",
             price=product["price"],
             stock=product["stock"],
             image=product.get("image"),
@@ -887,6 +896,7 @@ def parse_inventory_file(file_storage):
                 products.append({
                     "barcode": str(row.get("barcode", "")).strip(),
                     "name": str(row.get("name", "")).strip(),
+                    "artist": str(row.get("artist", "") or "").strip(),
                     "price": float(row.get("price", 0)),
                     "stock": int(row.get("stock", 0)),
                     "image": str(row.get("image", "")).strip() or None,
@@ -907,6 +917,7 @@ def parse_inventory_file(file_storage):
                 products.append({
                     "barcode": str(row_data.get("barcode", "")).strip(),
                     "name": str(row_data.get("name", "")).strip(),
+                    "artist": str(row_data.get("artist", "") or "").strip(),
                     "price": float(row_data.get("price", 0) or 0),
                     "stock": int(row_data.get("stock", 0) or 0),
                     "image": str(row_data.get("image", "")).strip() or None,
@@ -957,6 +968,7 @@ def manage():
 def manage_add():
     barcode = request.form.get("barcode", "").strip()
     name = request.form.get("name", "").strip()
+    artist = request.form.get("artist", "").strip()
     price = request.form.get("price", "").strip()
     stock = request.form.get("stock", "").strip()
     image_file = request.files.get("image")
@@ -986,6 +998,7 @@ def manage_add():
     product = {
         "barcode": barcode,
         "name": name,
+        "artist": artist,
         "price": price,
         "stock": stock,
         "image": image_path,
@@ -1045,11 +1058,12 @@ def manage_export(fmt):
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["barcode", "name", "price", "stock", "image"])
+        writer.writerow(["barcode", "name", "artist", "price", "stock", "image"])
         for product in inventory:
             writer.writerow([
                 product.get("barcode", ""),
                 product.get("name", ""),
+                product.get("artist", ""),
                 product.get("price", ""),
                 product.get("stock", ""),
                 product.get("image", ""),
@@ -1064,11 +1078,12 @@ def manage_export(fmt):
     elif fmt in {"xlsx", "xlsm", "xltx", "xltm"}:
         workbook = openpyxl.Workbook()
         sheet = workbook.active
-        sheet.append(["barcode", "name", "price", "stock", "image"])
+        sheet.append(["barcode", "name", "artist", "price", "stock", "image"])
         for product in inventory:
             sheet.append([
                 product.get("barcode", ""),
                 product.get("name", ""),
+                product.get("artist", ""),
                 product.get("price", ""),
                 product.get("stock", ""),
                 product.get("image", ""),
@@ -1249,6 +1264,7 @@ def api_products_search():
             or_(
                 Product.name.ilike(pattern),
                 Product.barcode.ilike(pattern),
+                Product.artist.ilike(pattern),
             )
         )
     products = query.order_by(Product.name).limit(24).all()
