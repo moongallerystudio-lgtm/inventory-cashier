@@ -34,6 +34,8 @@
     .search-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; max-height: 500px; overflow-y: auto; padding-right: 2px; -webkit-overflow-scrolling: touch; }
     .product-tile { min-height: 92px; padding: 12px; border: 1px solid #d7dee8; border-radius: 8px; background: #fff; text-align: left; cursor: pointer; display: grid; grid-template-columns: 58px 1fr; gap: 10px; align-items: center; }
     .product-tile:disabled { opacity: 0.55; cursor: not-allowed; }
+    .artist-tile { min-height: 72px; padding: 12px; border: 1px solid #d7dee8; border-radius: 8px; background: #fff; text-align: left; cursor: pointer; }
+    .artist-back { grid-column: 1 / -1; }
     .product-thumb { width: 58px; height: 58px; border-radius: 8px; background: #eef2f7; object-fit: cover; }
     .product-placeholder { display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 700; }
     .product-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
@@ -222,6 +224,31 @@
       noImage: {{ t('no_image')|tojson }},
       stock: {{ t('stock')|tojson }},
       artist: {{ t('artist')|tojson }},
+      noArtistName: {
+        zh: "未设置艺术家",
+        en: "No Artist Set",
+        ja: "アーティスト未設定"
+      }[{{ current_lang()|tojson }}],
+      backToArtists: {
+        zh: "返回艺术家列表",
+        en: "Back to Artists",
+        ja: "アーティスト一覧へ戻る"
+      }[{{ current_lang()|tojson }}],
+      foundArtists: {
+        zh: "找到 {count} 位艺术家。",
+        en: "Found {count} artists.",
+        ja: "{count} 名のアーティストが見つかりました。"
+      }[{{ current_lang()|tojson }}],
+      noArtistsFound: {
+        zh: "没有找到匹配艺术家。",
+        en: "No matching artists found.",
+        ja: "一致するアーティストがありません。"
+      }[{{ current_lang()|tojson }}],
+      artistProductCount: {
+        zh: "{count} 件商品",
+        en: "{count} products",
+        ja: "{count} 件の商品"
+      }[{{ current_lang()|tojson }}],
       foundProducts: {
         zh: "找到 {count} 个商品。",
         en: "Found {count} products.",
@@ -250,6 +277,6 @@
     };
   </script>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js?v=20260604-artist-search"></script>
+  <script src="/static/main.js?v=20260604-artist-layer"></script>
 </body>
 </html>

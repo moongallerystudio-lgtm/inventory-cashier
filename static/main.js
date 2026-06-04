@@ -678,6 +678,13 @@ function renderProductResults(products) {
   if (!container) return;
   container.innerHTML = '';
 
+  const backButton = document.createElement('button');
+  backButton.type = 'button';
+  backButton.className = 'button gray artist-back';
+  backButton.textContent = tr('backToArtists', '返回艺术家列表');
+  backButton.onclick = () => searchProducts();
+  container.appendChild(backButton);
+
   if (!products || products.length === 0) {
     if (status) status.textContent = tr('noProductsFound', '没有找到匹配商品。');
     return;
@@ -709,6 +716,34 @@ function renderProductResults(products) {
   }
 
   if (status) status.textContent = tr('foundProducts', '找到 {count} 个商品。', { count: products.length });
+}
+
+function renderArtistResults(artists) {
+  const container = document.getElementById('productResults');
+  const status = document.getElementById('productSearchStatus');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!artists || artists.length === 0) {
+    if (status) status.textContent = tr('noArtistsFound', '没有找到匹配艺术家。');
+    return;
+  }
+
+  for (const artist of artists) {
+    const artistName = artist.name || '';
+    const artistLabel = artistName || tr('noArtistName', '未设置艺术家');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'artist-tile';
+    button.onclick = () => showArtistProducts(artistName);
+    button.innerHTML = `
+      <span class="product-name">${escapeHtml(artistLabel)}</span>
+      <span class="product-meta">${escapeHtml(tr('artistProductCount', '{count} 件商品', { count: artist.count }))}</span>
+    `;
+    container.appendChild(button);
+  }
+
+  if (status) status.textContent = tr('foundArtists', '找到 {count} 位艺术家。', { count: artists.length });
 }
 
 function filterInventoryTable() {
@@ -766,7 +801,20 @@ async function searchProducts() {
   const keyword = input ? input.value.trim() : '';
   if (status) status.textContent = tr('searching', '正在搜索...');
 
-  const response = await fetch(`/api/products/search?q=${encodeURIComponent(keyword)}`);
+  const response = await fetch(`/api/artists?q=${encodeURIComponent(keyword)}`);
+  const data = await response.json();
+  if (!response.ok) {
+    if (status) status.textContent = data.error || '搜索失败';
+    return;
+  }
+  renderArtistResults(data.artists);
+}
+
+async function showArtistProducts(artist) {
+  const status = document.getElementById('productSearchStatus');
+  if (status) status.textContent = tr('searching', '正在搜索...');
+
+  const response = await fetch(`/api/products/search?artist=${encodeURIComponent(artist)}`);
   const data = await response.json();
   if (!response.ok) {
     if (status) status.textContent = data.error || '搜索失败';

@@ -1,7 +1,7 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import inspect, or_, text
+from sqlalchemy import func, inspect, or_, text
 from werkzeug.utils import secure_filename
 from pathlib import Path
 import csv
@@ -1254,10 +1254,37 @@ def api_product(barcode):
     return jsonify({"found": False}), 404
 
 
+@app.route("/api/artists")
+def api_artists():
+    keyword = request.args.get("q", "").strip()
+    query = (
+        Product.query
+        .with_entities(Product.artist, func.count(Product.barcode))
+    )
+    if keyword:
+        pattern = f"%{keyword}%"
+        query = query.filter(Product.artist.ilike(pattern))
+    rows = (
+        query
+        .group_by(Product.artist)
+        .order_by(Product.artist)
+        .all()
+    )
+    return jsonify({
+        "artists": [
+            {"name": artist, "count": count}
+            for artist, count in rows
+        ],
+    })
+
+
 @app.route("/api/products/search")
 def api_products_search():
     keyword = request.args.get("q", "").strip()
+    artist = request.args.get("artist", "").strip()
     query = Product.query
+    if "artist" in request.args:
+        query = query.filter(Product.artist == artist)
     if keyword:
         pattern = f"%{keyword}%"
         query = query.filter(
@@ -1267,7 +1294,7 @@ def api_products_search():
                 Product.artist.ilike(pattern),
             )
         )
-    products = query.order_by(Product.name).limit(24).all()
+    products = query.order_by(Product.name).limit(100).all()
     return jsonify({
         "products": [product.to_dict() for product in products],
     })
