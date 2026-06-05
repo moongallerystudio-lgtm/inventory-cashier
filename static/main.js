@@ -4,6 +4,7 @@ let videoStream = null;
 let barcodeDetector = null;
 let quaggaRunning = false;
 let currentMember = null;
+let activeArtistFilter = null;
 let lastImageDataUrl = null;
 let lastRotation = 0;
 let audioContext = null;
@@ -796,6 +797,7 @@ function editInventoryProduct(barcode, name, price, stock) {
 }
 
 async function searchProducts() {
+  activeArtistFilter = null;
   const input = document.getElementById('productSearch');
   const status = document.getElementById('productSearchStatus');
   const keyword = input ? input.value.trim() : '';
@@ -811,6 +813,7 @@ async function searchProducts() {
 }
 
 async function showArtistProducts(artist) {
+  activeArtistFilter = artist;
   const status = document.getElementById('productSearchStatus');
   if (status) status.textContent = tr('searching', '正在搜索...');
 
@@ -827,7 +830,9 @@ async function addProductByBarcode(barcode) {
   const barcodeInput = document.getElementById('cashierBarcode');
   if (barcodeInput) barcodeInput.value = barcode;
   await scanCashierBarcode();
-  await searchProducts();
+  if (activeArtistFilter !== null) {
+    await showArtistProducts(activeArtistFilter);
+  }
 }
 
 async function removeCartItem(barcode) {
