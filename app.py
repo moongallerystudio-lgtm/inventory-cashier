@@ -1104,8 +1104,16 @@ def daily_sales_summary(sales):
 
 def sale_export_rows(rows):
     export_rows = []
+    product_barcodes = {row.get("barcode") for row in rows if row.get("barcode")}
+    products = {
+        product.barcode: product
+        for product in Product.query.filter(Product.barcode.in_(product_barcodes)).all()
+    } if product_barcodes else {}
     for row in rows:
         export_row = dict(row)
+        product = products.get(row.get("barcode"))
+        export_row["artist"] = product.artist if product else ""
+        export_row["product_image"] = product.image if product and product.image else ""
         if row.get("item_index", 0) > 0:
             export_row["order_total"] = ""
             export_row["order_payable"] = ""
@@ -1539,7 +1547,7 @@ def sales_export(fmt):
     daily_summary = daily_sales_summary(sales)
     headers = [
         "sale_no", "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
-        "barcode", "name", "price", "qty", "subtotal", "order_total", "order_payable",
+        "name", "artist", "product_image", "price", "qty", "subtotal", "order_total", "order_payable",
     ]
     summary_headers = ["date", "orders", "sold_items", "original_total", "paid_amount"]
     filename_date = (
@@ -1571,13 +1579,27 @@ def sales_export(fmt):
 
         detail_sheet = workbook.create_sheet("Sales Details")
         detail_sheet.append(headers)
-        for row in export_rows:
+        product_barcodes = {row.get("barcode") for row in export_rows if row.get("barcode")}
+        products = {
+            product.barcode: product
+            for product in Product.query.filter(Product.barcode.in_(product_barcodes)).all()
+        } if product_barcodes else {}
+        image_column_index = headers.index("product_image") + 1
+        image_column_letter = openpyxl.utils.get_column_letter(image_column_index)
+        for row_index, row in enumerate(export_rows, start=2):
             detail_sheet.append([row.get(header, "") for header in headers])
+            detail_sheet.row_dimensions[row_index].height = 72
+            product = products.get(row.get("barcode"))
+            photo_image = excel_image_from_bytes(product_image_bytes(product), max_width=86, max_height=68) if product else None
+            if photo_image:
+                detail_sheet.cell(row=row_index, column=image_column_index, value="")
+                detail_sheet.add_image(photo_image, f"{image_column_letter}{row_index}")
 
         for worksheet in (sheet, detail_sheet):
             for column_cells in worksheet.columns:
                 max_length = max(len(str(cell.value or "")) for cell in column_cells)
                 worksheet.column_dimensions[column_cells[0].column_letter].width = min(max_length + 2, 32)
+        detail_sheet.column_dimensions[image_column_letter].width = 16
         output = io.BytesIO()
         workbook.save(output)
         output.seek(0)
