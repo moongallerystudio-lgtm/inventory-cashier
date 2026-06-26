@@ -70,7 +70,6 @@ TRANSLATIONS = {
         "cancel_cart": "取消购物车",
         "barcode": "条形码",
         "product_label_barcode": "商品条形码",
-        "download_label_barcode": "下载条形码",
         "product": "商品",
         "product_name": "商品名称",
         "artist": "艺术家",
@@ -181,7 +180,6 @@ TRANSLATIONS = {
         "cancel_cart": "Cancel Cart",
         "barcode": "Barcode",
         "product_label_barcode": "Product Barcode",
-        "download_label_barcode": "Download Barcode",
         "product": "Product",
         "product_name": "Product Name",
         "artist": "Artist",
@@ -292,7 +290,6 @@ TRANSLATIONS = {
         "cancel_cart": "カート取消",
         "barcode": "バーコード",
         "product_label_barcode": "商品バーコード",
-        "download_label_barcode": "バーコードをダウンロード",
         "product": "商品",
         "product_name": "商品名",
         "artist": "アーティスト",
@@ -1135,26 +1132,6 @@ def product_label_barcode(barcode):
     if not svg:
         return Response("", status=404)
     return Response(svg, mimetype="image/svg+xml")
-
-
-@app.route("/product-label-barcode-download/<path:barcode>")
-def product_label_barcode_download(barcode):
-    product = Product.query.get(barcode)
-    if not product:
-        return Response("", status=404)
-    if not product.label_barcode:
-        ensure_unique_label_barcode(product)
-        db.session.commit()
-    svg = ean13_svg(product.label_barcode)
-    if not svg:
-        return Response("", status=404)
-    filename_base = secure_filename(product.name) or product.label_barcode or "product-barcode"
-    return send_file(
-        io.BytesIO(svg.encode("utf-8")),
-        mimetype="image/svg+xml",
-        as_attachment=True,
-        download_name=f"{filename_base}-{product.label_barcode}.svg",
-    )
 
 
 @app.route("/manage")
