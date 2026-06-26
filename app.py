@@ -15,9 +15,11 @@ from zoneinfo import ZoneInfo
 import openpyxl
 from markupsafe import Markup
 try:
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
 except ImportError:
     Image = None
+    ImageDraw = None
+    ImageFont = None
     ImageOps = None
 
 app = Flask(__name__)
@@ -573,10 +575,10 @@ def ean13_svg(code):
     pattern = ean13_pattern(code)
     if not pattern:
         return None
-    module = 2
-    quiet = 10
-    bar_height = 70
-    text_height = 18
+    module = 6
+    quiet = 14
+    bar_height = 250
+    text_height = 58
     width = (len(pattern) + quiet * 2) * module
     height = bar_height + text_height
     bars = []
@@ -590,10 +592,58 @@ def ean13_svg(code):
         f'viewBox="0 0 {width} {height}" role="img" aria-label="{safe_code}">'
         f'<rect width="100%" height="100%" fill="#ffffff"/>'
         f'{"".join(bars)}'
-        f'<text x="{width / 2}" y="{bar_height + 14}" text-anchor="middle" '
-        f'font-family="Arial, sans-serif" font-size="14" fill="#111827">{safe_code}</text>'
+        f'<text x="{width / 2}" y="{bar_height + 42}" text-anchor="middle" '
+        f'font-family="Arial, sans-serif" font-size="34" fill="#111827">{safe_code}</text>'
         f'</svg>'
     )
+
+
+def barcode_font(size):
+    if ImageFont is None:
+        return None
+    for font_path in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+    ):
+        try:
+            return ImageFont.truetype(font_path, size=size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def ean13_png(code):
+    pattern = ean13_pattern(code)
+    if not pattern or Image is None or ImageDraw is None:
+        return None
+
+    module = 6
+    quiet = 14
+    top_padding = 18
+    bar_height = 250
+    text_height = 58
+    width = (len(pattern) + quiet * 2) * module
+    height = top_padding + bar_height + text_height
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+
+    for index, bit in enumerate(pattern):
+        if bit == "1":
+            x = (quiet + index) * module
+            draw.rectangle((x, top_padding, x + module - 1, top_padding + bar_height), fill="#111827")
+
+    font = barcode_font(34)
+    code_text = str(code)
+    text_bbox = draw.textbbox((0, 0), code_text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_x = max(0, (width - text_width) // 2)
+    draw.text((text_x, top_padding + bar_height + 10), code_text, fill="#111827", font=font)
+
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    output.seek(0)
+    return output
 
 
 with app.app_context():
@@ -1128,6 +1178,9 @@ def product_label_barcode(barcode):
     if not product.label_barcode:
         ensure_unique_label_barcode(product)
         db.session.commit()
+    png = ean13_png(product.label_barcode)
+    if png:
+        return send_file(png, mimetype="image/png", max_age=3600)
     svg = ean13_svg(product.label_barcode)
     if not svg:
         return Response("", status=404)
