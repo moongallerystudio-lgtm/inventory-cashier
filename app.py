@@ -1,10 +1,11 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
+from flask import Flask, Response, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, inspect, or_, text
 from werkzeug.utils import secure_filename
 from pathlib import Path
 import csv
+import hashlib
 import io
 import json
 import mimetypes
@@ -68,6 +69,7 @@ TRANSLATIONS = {
         "print_receipt": "打印小票",
         "cancel_cart": "取消购物车",
         "barcode": "条形码",
+        "product_label_barcode": "商品条形码",
         "product": "商品",
         "product_name": "商品名称",
         "artist": "艺术家",
@@ -177,6 +179,7 @@ TRANSLATIONS = {
         "print_receipt": "Print Receipt",
         "cancel_cart": "Cancel Cart",
         "barcode": "Barcode",
+        "product_label_barcode": "Product Barcode",
         "product": "Product",
         "product_name": "Product Name",
         "artist": "Artist",
@@ -286,6 +289,7 @@ TRANSLATIONS = {
         "print_receipt": "レシート印刷",
         "cancel_cart": "カート取消",
         "barcode": "バーコード",
+        "product_label_barcode": "商品バーコード",
         "product": "商品",
         "product_name": "商品名",
         "artist": "アーティスト",
@@ -392,6 +396,7 @@ PAYMENT_METHOD_KEYS = {
 class Product(db.Model):
     __tablename__ = "products"
     barcode = db.Column(db.String(128), primary_key=True)
+    label_barcode = db.Column(db.String(32), nullable=True, index=True)
     name = db.Column(db.String(256), nullable=False)
     artist = db.Column(db.String(256), nullable=False, default="")
     price = db.Column(db.Float, nullable=False, default=0.0)
@@ -404,6 +409,7 @@ class Product(db.Model):
         has_image = bool(self.image_data or self.image)
         return {
             "barcode": self.barcode,
+            "label_barcode": self.label_barcode or "",
             "name": self.name,
             "artist": self.artist or "",
             "price": self.price,
@@ -467,6 +473,8 @@ def ensure_schema():
     table_names = inspector.get_table_names()
     if "products" in table_names:
         product_columns = {column["name"] for column in inspector.get_columns("products")}
+        if "label_barcode" not in product_columns:
+            db.session.execute(text("ALTER TABLE products ADD COLUMN label_barcode VARCHAR(32)"))
         if "artist" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN artist VARCHAR(256) NOT NULL DEFAULT ''"))
         if "image_data" not in product_columns:
@@ -496,11 +504,104 @@ def backfill_product_image_data():
         db.session.commit()
 
 
+def ean13_checksum(first_12_digits):
+    digits = [int(char) for char in first_12_digits]
+    total = sum(digits[::2]) + sum(digits[1::2]) * 3
+    return str((10 - (total % 10)) % 10)
+
+
+def generate_label_barcode(name, salt=""):
+    source = f"{name or 'product'}|{salt}".encode("utf-8")
+    digest_number = int(hashlib.sha1(source).hexdigest(), 16)
+    first_12 = "20" + str(digest_number).zfill(10)[-10:]
+    return first_12 + ean13_checksum(first_12)
+
+
+def ensure_unique_label_barcode(product):
+    salt = product.barcode or ""
+    for attempt in range(20):
+        code = generate_label_barcode(product.name, salt if attempt == 0 else f"{salt}-{attempt}")
+        existing = Product.query.filter(Product.label_barcode == code, Product.barcode != product.barcode).first()
+        if not existing:
+            product.label_barcode = code
+            return
+    product.label_barcode = generate_label_barcode(product.name, f"{salt}-fallback")
+
+
+def backfill_product_label_barcodes():
+    changed = False
+    for product in Product.query.filter(or_(Product.label_barcode.is_(None), Product.label_barcode == "")).all():
+        ensure_unique_label_barcode(product)
+        changed = True
+    if changed:
+        db.session.commit()
+
+
+EAN13_LEFT_ODD = {
+    "0": "0001101", "1": "0011001", "2": "0010011", "3": "0111101", "4": "0100011",
+    "5": "0110001", "6": "0101111", "7": "0111011", "8": "0110111", "9": "0001011",
+}
+EAN13_LEFT_EVEN = {
+    "0": "0100111", "1": "0110011", "2": "0011011", "3": "0100001", "4": "0011101",
+    "5": "0111001", "6": "0000101", "7": "0010001", "8": "0001001", "9": "0010111",
+}
+EAN13_RIGHT = {
+    "0": "1110010", "1": "1100110", "2": "1101100", "3": "1000010", "4": "1011100",
+    "5": "1001110", "6": "1010000", "7": "1000100", "8": "1001000", "9": "1110100",
+}
+EAN13_PARITY = {
+    "0": "OOOOOO", "1": "OOEOEE", "2": "OOEEOE", "3": "OOEEEO", "4": "OEOOEE",
+    "5": "OEEOOE", "6": "OEEEOO", "7": "OEOEOE", "8": "OEOEEO", "9": "OEEOEO",
+}
+
+
+def ean13_pattern(code):
+    digits = "".join(char for char in str(code or "") if char.isdigit())
+    if len(digits) != 13:
+        return None
+    if ean13_checksum(digits[:12]) != digits[-1]:
+        return None
+    left = "".join(
+        (EAN13_LEFT_ODD if parity == "O" else EAN13_LEFT_EVEN)[digit]
+        for digit, parity in zip(digits[1:7], EAN13_PARITY[digits[0]])
+    )
+    right = "".join(EAN13_RIGHT[digit] for digit in digits[7:])
+    return "101" + left + "01010" + right + "101"
+
+
+def ean13_svg(code):
+    pattern = ean13_pattern(code)
+    if not pattern:
+        return None
+    module = 2
+    quiet = 10
+    bar_height = 70
+    text_height = 18
+    width = (len(pattern) + quiet * 2) * module
+    height = bar_height + text_height
+    bars = []
+    for index, bit in enumerate(pattern):
+        if bit == "1":
+            x = (quiet + index) * module
+            bars.append(f'<rect x="{x}" y="0" width="{module}" height="{bar_height}" fill="#111827"/>')
+    safe_code = Markup.escape(str(code))
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" aria-label="{safe_code}">'
+        f'<rect width="100%" height="100%" fill="#ffffff"/>'
+        f'{"".join(bars)}'
+        f'<text x="{width / 2}" y="{bar_height + 14}" text-anchor="middle" '
+        f'font-family="Arial, sans-serif" font-size="14" fill="#111827">{safe_code}</text>'
+        f'</svg>'
+    )
+
+
 with app.app_context():
     ensure_directories()
     db.create_all()
     ensure_schema()
     backfill_product_image_data()
+    backfill_product_label_barcodes()
 
 
 def get_language():
@@ -566,6 +667,7 @@ def save_inventory(data):
         try:
             product_data = {
                 "barcode": str(item.get("barcode", "") or "").strip(),
+                "label_barcode": str(item.get("label_barcode", "") or "").strip(),
                 "name": str(item.get("name", "") or "").strip(),
                 "artist": str(item.get("artist", "") or "").strip(),
                 "price": float(item.get("price", 0) or 0),
@@ -598,7 +700,10 @@ def save_members(data):
 
 
 def find_product(barcode):
-    return Product.query.get(barcode)
+    product = Product.query.get(barcode)
+    if product:
+        return product
+    return Product.query.filter(Product.label_barcode == barcode).first()
 
 
 def find_member(member_id):
@@ -689,6 +794,9 @@ def update_product(product):
     if existing:
         existing.name = product["name"]
         existing.artist = product.get("artist", "") or ""
+        existing.label_barcode = product.get("label_barcode") or existing.label_barcode
+        if not existing.label_barcode:
+            ensure_unique_label_barcode(existing)
         existing.price = product["price"]
         existing.stock = product["stock"]
         existing.image = product.get("image")
@@ -700,12 +808,15 @@ def update_product(product):
             barcode=product["barcode"],
             name=product["name"],
             artist=product.get("artist", "") or "",
+            label_barcode=product.get("label_barcode") or None,
             price=product["price"],
             stock=product["stock"],
             image=product.get("image"),
             image_data=product.get("image_data"),
             image_mime=product.get("image_mime"),
         )
+        if not existing.label_barcode:
+            ensure_unique_label_barcode(existing)
         db.session.add(existing)
     db.session.commit()
 
@@ -946,6 +1057,7 @@ def parse_inventory_file(file_storage):
             try:
                 products.append({
                     "barcode": str(row.get("barcode", "")).strip(),
+                    "label_barcode": str(row.get("label_barcode", "") or "").strip(),
                     "name": str(row.get("name", "")).strip(),
                     "artist": str(row.get("artist", "") or "").strip(),
                     "price": float(row.get("price", 0)),
@@ -967,6 +1079,7 @@ def parse_inventory_file(file_storage):
             try:
                 products.append({
                     "barcode": str(row_data.get("barcode", "")).strip(),
+                    "label_barcode": str(row_data.get("label_barcode", "") or "").strip(),
                     "name": str(row_data.get("name", "")).strip(),
                     "artist": str(row_data.get("artist", "") or "").strip(),
                     "price": float(row_data.get("price", 0) or 0),
@@ -1005,6 +1118,20 @@ def product_image(barcode):
                     max_age=3600,
                 )
     return redirect(url_for("static", filename="logo.jpg"))
+
+
+@app.route("/product-label-barcode/<path:barcode>")
+def product_label_barcode(barcode):
+    product = Product.query.get(barcode)
+    if not product:
+        return Response("", status=404)
+    if not product.label_barcode:
+        ensure_unique_label_barcode(product)
+        db.session.commit()
+    svg = ean13_svg(product.label_barcode)
+    if not svg:
+        return Response("", status=404)
+    return Response(svg, mimetype="image/svg+xml")
 
 
 @app.route("/manage")
@@ -1109,10 +1236,11 @@ def manage_export(fmt):
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["barcode", "name", "artist", "price", "stock", "image"])
+        writer.writerow(["barcode", "label_barcode", "name", "artist", "price", "stock", "image"])
         for product in inventory:
             writer.writerow([
                 product.get("barcode", ""),
+                product.get("label_barcode", ""),
                 product.get("name", ""),
                 product.get("artist", ""),
                 product.get("price", ""),
@@ -1129,10 +1257,11 @@ def manage_export(fmt):
     elif fmt in {"xlsx", "xlsm", "xltx", "xltm"}:
         workbook = openpyxl.Workbook()
         sheet = workbook.active
-        sheet.append(["barcode", "name", "artist", "price", "stock", "image"])
+        sheet.append(["barcode", "label_barcode", "name", "artist", "price", "stock", "image"])
         for product in inventory:
             sheet.append([
                 product.get("barcode", ""),
+                product.get("label_barcode", ""),
                 product.get("name", ""),
                 product.get("artist", ""),
                 product.get("price", ""),
@@ -1370,6 +1499,7 @@ def api_products_search():
             or_(
                 Product.name.ilike(pattern),
                 Product.barcode.ilike(pattern),
+                Product.label_barcode.ilike(pattern),
                 Product.artist.ilike(pattern),
             )
         )
@@ -1389,12 +1519,13 @@ def api_cashier_scan():
     if not product:
         return jsonify({"error": "未找到商品"}), 404
 
+    cart_barcode = product.barcode
     cart = get_cart()
-    qty = cart.get(barcode, 0) + 1
+    qty = cart.get(cart_barcode, 0) + 1
     if qty > product.stock:
         return jsonify({"error": "库存不足"}), 400
 
-    cart[barcode] = qty
+    cart[cart_barcode] = qty
     save_cart(cart)
     cart_data = cart_payload()
     save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
