@@ -13,6 +13,7 @@ import socket
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 import openpyxl
+from openpyxl.drawing.image import Image as XLImage
 from markupsafe import Markup
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -1188,6 +1189,33 @@ def product_image(barcode):
     return redirect(url_for("static", filename="logo.jpg"))
 
 
+def excel_image_from_bytes(image_bytes, max_width=120, max_height=86):
+    if not image_bytes:
+        return None
+    try:
+        excel_image = XLImage(io.BytesIO(image_bytes))
+        if excel_image.width and excel_image.height:
+            scale = min(max_width / excel_image.width, max_height / excel_image.height, 1)
+            excel_image.width = int(excel_image.width * scale)
+            excel_image.height = int(excel_image.height * scale)
+        return excel_image
+    except Exception:
+        return None
+
+
+def product_image_bytes(product):
+    if product.image_data:
+        return product.image_data
+    if product.image:
+        image_path = BASE / "static" / product.image
+        if image_path.exists() and image_path.is_file():
+            try:
+                return image_path.read_bytes()
+            except Exception:
+                return None
+    return None
+
+
 @app.route("/product-label-barcode/<path:barcode>")
 def product_label_barcode(barcode):
     product = Product.query.get(barcode)
@@ -1331,17 +1359,57 @@ def manage_export(fmt):
     elif fmt in {"xlsx", "xlsm", "xltx", "xltm"}:
         workbook = openpyxl.Workbook()
         sheet = workbook.active
-        sheet.append(["barcode", "label_barcode", "name", "artist", "price", "stock", "image"])
-        for product in inventory:
+        sheet.title = "Inventory"
+        sheet.append([
+            "barcode",
+            "label_barcode_image",
+            "label_barcode",
+            "name",
+            "artist",
+            "price",
+            "stock",
+            "product_image",
+        ])
+        product_rows = Product.query.order_by(Product.barcode).all()
+        for row_index, product in enumerate(product_rows, start=2):
             sheet.append([
-                product.get("barcode", ""),
-                product.get("label_barcode", ""),
-                product.get("name", ""),
-                product.get("artist", ""),
-                product.get("price", ""),
-                product.get("stock", ""),
-                product.get("image", ""),
+                product.barcode,
+                "",
+                product.label_barcode or "",
+                product.name,
+                product.artist or "",
+                product.price,
+                product.stock,
+                "",
             ])
+            sheet.row_dimensions[row_index].height = 72
+
+            barcode_png = ean13_png(product.label_barcode)
+            barcode_image = excel_image_from_bytes(barcode_png.getvalue() if barcode_png else None, max_width=170, max_height=68)
+            if barcode_image:
+                sheet.add_image(barcode_image, f"B{row_index}")
+            else:
+                sheet.cell(row=row_index, column=2, value=product.label_barcode or "")
+
+            photo_image = excel_image_from_bytes(product_image_bytes(product), max_width=86, max_height=68)
+            if photo_image:
+                sheet.add_image(photo_image, f"H{row_index}")
+            else:
+                sheet.cell(row=row_index, column=8, value=product.image or "")
+
+        sheet.freeze_panes = "A2"
+        widths = {
+            "A": 18,
+            "B": 26,
+            "C": 18,
+            "D": 26,
+            "E": 20,
+            "F": 10,
+            "G": 10,
+            "H": 16,
+        }
+        for column, width in widths.items():
+            sheet.column_dimensions[column].width = width
         output = io.BytesIO()
         workbook.save(output)
         output.seek(0)
