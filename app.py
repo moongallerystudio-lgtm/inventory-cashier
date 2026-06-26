@@ -519,6 +519,22 @@ def generate_label_barcode(name, salt=""):
     return first_12 + ean13_checksum(first_12)
 
 
+def generate_product_barcode(name, salt=""):
+    source = f"product|{name or 'product'}|{salt}".encode("utf-8")
+    digest_number = int(hashlib.sha1(source).hexdigest(), 16)
+    first_12 = "21" + str(digest_number).zfill(10)[-10:]
+    return first_12 + ean13_checksum(first_12)
+
+
+def unique_product_barcode(name):
+    for attempt in range(100):
+        salt = "" if attempt == 0 else str(attempt)
+        barcode = generate_product_barcode(name, salt)
+        if not Product.query.get(barcode):
+            return barcode
+    return generate_product_barcode(name, datetime.now(APP_TIMEZONE).isoformat())
+
+
 def ensure_unique_label_barcode(product):
     salt = product.barcode or ""
     for attempt in range(20):
@@ -726,7 +742,9 @@ def save_inventory(data):
             }
         except (ValueError, TypeError):
             continue
-        if product_data["barcode"] and product_data["name"]:
+        if product_data["name"]:
+            if not product_data["barcode"]:
+                product_data["barcode"] = unique_product_barcode(product_data["name"])
             update_product(product_data)
 
 
@@ -1102,7 +1120,7 @@ def parse_inventory_file(file_storage):
         reader = csv.DictReader(text)
         products = []
         for row in reader:
-            if not row.get("barcode"):
+            if not row.get("name"):
                 continue
             try:
                 products.append({
@@ -1204,7 +1222,7 @@ def manage_add():
     stock = request.form.get("stock", "").strip()
     image_file = request.files.get("image")
 
-    if not barcode or not name or not price or not stock:
+    if not name or not price or not stock:
         flash("请填写完整商品信息", "error")
         return redirect(url_for("manage"))
     try:
@@ -1216,6 +1234,9 @@ def manage_add():
     if price < 0 or stock < 0:
         flash("价格和库存不能为负数", "error")
         return redirect(url_for("manage"))
+
+    if not barcode:
+        barcode = unique_product_barcode(name)
 
     existing = find_product(barcode)
     image_path = existing.image if existing else None

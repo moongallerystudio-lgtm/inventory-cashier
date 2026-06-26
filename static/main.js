@@ -769,11 +769,12 @@ function filterInventoryTable() {
 function resetInventoryProductForm() {
   const form = document.getElementById('productForm');
   const barcodeInput = document.getElementById('barcode');
+  const nameInput = document.getElementById('productName');
   if (form) form.reset();
   if (barcodeInput) {
-    barcodeInput.readOnly = false;
-    barcodeInput.focus();
+    barcodeInput.value = '';
   }
+  if (nameInput) nameInput.focus();
 }
 
 function editInventoryProduct(barcode, name, price, stock) {
@@ -786,7 +787,6 @@ function editInventoryProduct(barcode, name, price, stock) {
 
   if (barcodeInput) {
     barcodeInput.value = barcode;
-    barcodeInput.readOnly = true;
   }
   if (nameInput) nameInput.value = name;
   if (priceInput) priceInput.value = formatJpy(price);

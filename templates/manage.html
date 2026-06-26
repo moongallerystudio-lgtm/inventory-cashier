@@ -70,7 +70,6 @@
       <div class="toolbar">
         {{ language_switch() }}
         <a class="button gray" href="/">{{ t('home') }}</a>
-        <button type="button" class="button green" onclick="startScan('barcode')">{{ t('start_scan') }}</button>
       </div>
     </div>
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -83,8 +82,8 @@
       <div class="panel" id="productFormPanel">
         <h2>{{ t('edit_product') }}</h2>
         <form id="productForm" method="post" action="/manage/add" enctype="multipart/form-data">
+          <input type="hidden" name="barcode" id="barcode" value="{{ edit_product.barcode if edit_product else '' }}">
           <div class="form-row">
-            <label>{{ t('barcode') }}<input type="text" name="barcode" id="barcode" placeholder="6901234567890" value="{{ edit_product.barcode if edit_product else '' }}" {% if edit_product %}readonly{% endif %} required></label>
             <label>{{ t('product_name') }}<input type="text" name="name" id="productName" placeholder="{{ t('product_name') }}" value="{{ edit_product.name if edit_product else '' }}" required></label>
             <label>{{ t('artist') }}<input type="text" name="artist" id="productArtist" placeholder="{{ t('artist') }}" value="{{ edit_product.artist if edit_product else '' }}"></label>
             <label>{{ t('price') }}<input type="number" name="price" id="productPrice" step="1" placeholder="120" value="{{ edit_product.price|jpy if edit_product else '' }}" required></label>
@@ -165,7 +164,7 @@
       </div>
   </div>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js?v=20260529-inventory-edit-server"></script>
+  <script src="/static/main.js?v=20260626-auto-product-barcode"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->
