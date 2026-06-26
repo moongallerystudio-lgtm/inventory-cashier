@@ -35,6 +35,7 @@
     .action-cell { display: flex; gap: 8px; flex-wrap: wrap; }
     .label-barcode { width: 170px; max-width: 100%; height: auto; display: block; background: #fff; border: 1px solid #e5eaf0; border-radius: 6px; }
     .label-barcode-code { display: block; margin-top: 4px; color: #64748b; font-size: 12px; word-break: break-all; }
+    .label-barcode-download { margin-top: 6px; min-height: 34px; padding: 0 10px; font-size: 13px; }
     .product-image { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: #eef2f7; }
     .alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; }
     .alert.error { background: #ffe2e6; color: #9a161b; }
@@ -132,6 +133,7 @@
                     {% if product.label_barcode %}
                       <img class="label-barcode" src="/product-label-barcode/{{ product.barcode|urlencode }}" alt="{{ product.label_barcode }}">
                       <span class="label-barcode-code">{{ product.label_barcode }}</span>
+                      <a class="button gray label-barcode-download" href="/product-label-barcode-download/{{ product.barcode|urlencode }}">{{ t('download_label_barcode') }}</a>
                     {% else %}
                       -
                     {% endif %}
