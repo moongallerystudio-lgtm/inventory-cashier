@@ -1338,10 +1338,9 @@ def manage_export(fmt):
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["barcode", "label_barcode", "name", "artist", "price", "stock", "image"])
+        writer.writerow(["label_barcode", "name", "artist", "price", "stock", "image"])
         for product in inventory:
             writer.writerow([
-                product.get("barcode", ""),
                 product.get("label_barcode", ""),
                 product.get("name", ""),
                 product.get("artist", ""),
@@ -1361,7 +1360,6 @@ def manage_export(fmt):
         sheet = workbook.active
         sheet.title = "Inventory"
         sheet.append([
-            "barcode",
             "label_barcode_image",
             "label_barcode",
             "name",
@@ -1373,7 +1371,6 @@ def manage_export(fmt):
         product_rows = Product.query.order_by(Product.barcode).all()
         for row_index, product in enumerate(product_rows, start=2):
             sheet.append([
-                product.barcode,
                 "",
                 product.label_barcode or "",
                 product.name,
@@ -1387,26 +1384,25 @@ def manage_export(fmt):
             barcode_png = ean13_png(product.label_barcode)
             barcode_image = excel_image_from_bytes(barcode_png.getvalue() if barcode_png else None, max_width=170, max_height=68)
             if barcode_image:
-                sheet.add_image(barcode_image, f"B{row_index}")
+                sheet.add_image(barcode_image, f"A{row_index}")
             else:
-                sheet.cell(row=row_index, column=2, value=product.label_barcode or "")
+                sheet.cell(row=row_index, column=1, value=product.label_barcode or "")
 
             photo_image = excel_image_from_bytes(product_image_bytes(product), max_width=86, max_height=68)
             if photo_image:
-                sheet.add_image(photo_image, f"H{row_index}")
+                sheet.add_image(photo_image, f"G{row_index}")
             else:
-                sheet.cell(row=row_index, column=8, value=product.image or "")
+                sheet.cell(row=row_index, column=7, value=product.image or "")
 
         sheet.freeze_panes = "A2"
         widths = {
-            "A": 18,
-            "B": 26,
-            "C": 18,
-            "D": 26,
-            "E": 20,
+            "A": 26,
+            "B": 18,
+            "C": 26,
+            "D": 20,
+            "E": 10,
             "F": 10,
-            "G": 10,
-            "H": 16,
+            "G": 16,
         }
         for column, width in widths.items():
             sheet.column_dimensions[column].width = width
