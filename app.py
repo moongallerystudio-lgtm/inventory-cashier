@@ -588,29 +588,47 @@ def ean13_pattern(code):
     return "101" + left + "01010" + right + "101"
 
 
+def ean13_guard_index(index):
+    return index in {0, 1, 2, 45, 46, 47, 48, 49, 92, 93, 94}
+
+
 def ean13_svg(code):
     pattern = ean13_pattern(code)
     if not pattern:
         return None
     module = 6
     quiet = 14
-    bar_height = 250
-    text_height = 58
+    top_padding = 10
+    bar_height = 210
+    guard_height = 250
+    text_height = 68
     width = (len(pattern) + quiet * 2) * module
-    height = bar_height + text_height
+    height = top_padding + guard_height + text_height
     bars = []
     for index, bit in enumerate(pattern):
         if bit == "1":
             x = (quiet + index) * module
-            bars.append(f'<rect x="{x}" y="0" width="{module}" height="{bar_height}" fill="#111827"/>')
+            height_px = guard_height if ean13_guard_index(index) else bar_height
+            bars.append(f'<rect x="{x}" y="{top_padding}" width="{module}" height="{height_px}" fill="#111827"/>')
     safe_code = Markup.escape(str(code))
+    first_digit = Markup.escape(str(code)[0])
+    left_digits = Markup.escape(str(code)[1:7])
+    right_digits = Markup.escape(str(code)[7:])
+    left_text_x = (quiet + 3 + 21) * module
+    right_text_x = (quiet + 50 + 21) * module
+    first_text_x = (quiet - 6) * module
+    text_y = top_padding + guard_height + 42
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-label="{safe_code}">'
         f'<rect width="100%" height="100%" fill="#ffffff"/>'
         f'{"".join(bars)}'
-        f'<text x="{width / 2}" y="{bar_height + 42}" text-anchor="middle" '
-        f'font-family="Arial, sans-serif" font-size="34" fill="#111827">{safe_code}</text>'
+        f'<text x="{first_text_x}" y="{text_y}" text-anchor="middle" '
+        f'font-family="Arial, sans-serif" font-size="34" fill="#111827">{first_digit}</text>'
+        f'<text x="{left_text_x}" y="{text_y}" text-anchor="middle" '
+        f'font-family="Arial, sans-serif" font-size="34" fill="#111827">{left_digits}</text>'
+        f'<text x="{right_text_x}" y="{text_y}" text-anchor="middle" '
+        f'font-family="Arial, sans-serif" font-size="34" fill="#111827">{right_digits}</text>'
         f'</svg>'
     )
 
@@ -637,25 +655,33 @@ def ean13_png(code):
 
     module = 6
     quiet = 14
-    top_padding = 18
-    bar_height = 250
-    text_height = 58
+    top_padding = 10
+    bar_height = 210
+    guard_height = 250
+    text_height = 68
     width = (len(pattern) + quiet * 2) * module
-    height = top_padding + bar_height + text_height
+    height = top_padding + guard_height + text_height
     image = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(image)
 
     for index, bit in enumerate(pattern):
         if bit == "1":
             x = (quiet + index) * module
-            draw.rectangle((x, top_padding, x + module - 1, top_padding + bar_height), fill="#111827")
+            height_px = guard_height if ean13_guard_index(index) else bar_height
+            draw.rectangle((x, top_padding, x + module - 1, top_padding + height_px), fill="#111827")
 
     font = barcode_font(34)
     code_text = str(code)
-    text_bbox = draw.textbbox((0, 0), code_text, font=font)
-    text_width = text_bbox[2] - text_bbox[0]
-    text_x = max(0, (width - text_width) // 2)
-    draw.text((text_x, top_padding + bar_height + 10), code_text, fill="#111827", font=font)
+    text_y = top_padding + guard_height + 8
+
+    def draw_centered(text, center_x):
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        draw.text((center_x - text_width / 2, text_y), text, fill="#111827", font=font)
+
+    draw_centered(code_text[0], (quiet - 6) * module)
+    draw_centered(code_text[1:7], (quiet + 3 + 21) * module)
+    draw_centered(code_text[7:], (quiet + 50 + 21) * module)
 
     output = io.BytesIO()
     image.save(output, format="PNG", optimize=True)
