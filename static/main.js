@@ -13,6 +13,7 @@ const SCAN_START_DELAY_MS = 1000;
 const REQUIRED_SCAN_MATCHES = 2;
 let pendingScanCode = '';
 let pendingScanMatches = 0;
+let scanCanvas = null;
 
 function clearScanStartTimer() {
   if (scanStartTimer) {
@@ -51,6 +52,65 @@ function confirmScanCandidate(code) {
     pendingScanMatches = 1;
   }
   return pendingScanMatches >= REQUIRED_SCAN_MATCHES;
+}
+
+function scanVideoConstraints() {
+  return {
+    facingMode: { ideal: 'environment' },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 30, max: 30 },
+  };
+}
+
+async function improveCameraForSmallBarcodes(stream) {
+  const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+  if (!track || !track.getCapabilities || !track.applyConstraints) return;
+  const capabilities = track.getCapabilities();
+  const advanced = [];
+  if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+    advanced.push({ focusMode: 'continuous' });
+  }
+  if (capabilities.zoom) {
+    const minZoom = capabilities.zoom.min || 1;
+    const maxZoom = capabilities.zoom.max || minZoom;
+    const targetZoom = Math.min(maxZoom, Math.max(minZoom, 2));
+    if (targetZoom > minZoom) advanced.push({ zoom: targetZoom });
+  }
+  if (advanced.length === 0) return;
+  try {
+    await track.applyConstraints({ advanced });
+  } catch (error) {
+    console.warn('Camera focus/zoom constraints ignored', error);
+  }
+}
+
+async function detectJan13Barcodes(videoElement) {
+  let barcodes = await barcodeDetector.detect(videoElement);
+  if (barcodes && barcodes.length > 0) return barcodes;
+
+  const videoWidth = videoElement.videoWidth || 0;
+  const videoHeight = videoElement.videoHeight || 0;
+  if (!videoWidth || !videoHeight) return [];
+  if (!scanCanvas) scanCanvas = document.createElement('canvas');
+  const context = scanCanvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return [];
+
+  for (const cropRatio of [0.82, 0.62]) {
+    const cropWidth = Math.round(videoWidth * cropRatio);
+    const cropHeight = Math.round(videoHeight * cropRatio);
+    const sourceX = Math.round((videoWidth - cropWidth) / 2);
+    const sourceY = Math.round((videoHeight - cropHeight) / 2);
+    const targetWidth = Math.min(1600, cropWidth * 2);
+    const targetHeight = Math.round(targetWidth * (cropHeight / cropWidth));
+    scanCanvas.width = targetWidth;
+    scanCanvas.height = targetHeight;
+    context.drawImage(videoElement, sourceX, sourceY, cropWidth, cropHeight, 0, 0, targetWidth, targetHeight);
+    // eslint-disable-next-line no-await-in-loop
+    barcodes = await barcodeDetector.detect(scanCanvas);
+    if (barcodes && barcodes.length > 0) return barcodes;
+  }
+  return [];
 }
 
 function getAudioContext() {
@@ -142,7 +202,8 @@ async function startScan(targetId) {
 
   if (barcodeDetector) {
     try {
-      videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      videoStream = await navigator.mediaDevices.getUserMedia({ video: scanVideoConstraints() });
+      await improveCameraForSmallBarcodes(videoStream);
       scanVideo.srcObject = videoStream;
       scanVideo.muted = true;
       videoWrapper.style.display = 'block';
@@ -186,7 +247,7 @@ function startQuagga(videoWrapper) {
       name: 'Live',
       type: 'LiveStream',
       target: videoWrapper,
-      constraints: { facingMode: 'environment' },
+      constraints: scanVideoConstraints(),
     },
     decoder: {
       readers: ['ean_reader']
@@ -234,7 +295,7 @@ async function scanFrame() {
 
   if (barcodeDetector) {
     try {
-      const barcodes = await barcodeDetector.detect(scanVideo);
+      const barcodes = await detectJan13Barcodes(scanVideo);
       if (barcodes && barcodes.length > 0) {
         const code = barcodes[0].rawValue;
         if (!confirmScanCandidate(code)) {
