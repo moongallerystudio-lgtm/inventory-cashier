@@ -89,7 +89,7 @@ async function startScan(targetId) {
   // Prefer native BarcodeDetector when available
   if ('BarcodeDetector' in window) {
     try {
-      barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code', 'upc_e'] });
+      barcodeDetector = new BarcodeDetector({ formats: ['ean_13'] });
     } catch (error) {
       barcodeDetector = null;
     }
@@ -140,7 +140,7 @@ function startQuagga(videoWrapper) {
       constraints: { facingMode: 'environment' },
     },
     decoder: {
-      readers: ['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader']
+      readers: ['ean_reader']
     },
     locate: true,
   }, function(err) {
@@ -333,7 +333,7 @@ function decodeImageFile(file) {
           Quagga.decodeSingle({
             src,
             numOfWorkers: 0,
-            decoder: { readers: ['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader'] },
+            decoder: { readers: ['ean_reader'] },
             locate: true
           }, resolve);
         });
@@ -526,7 +526,7 @@ async function decodeFromDataUrl(dataUrl) {
     Quagga.decodeSingle({
       src: dataUrl,
       numOfWorkers: 0,
-      decoder: { readers: ['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader'] },
+      decoder: { readers: ['ean_reader'] },
       locate: true
     }, resolve);
   });
