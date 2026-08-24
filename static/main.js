@@ -8,6 +8,15 @@ let activeArtistFilter = null;
 let lastImageDataUrl = null;
 let lastRotation = 0;
 let audioContext = null;
+let scanStartTimer = null;
+const SCAN_START_DELAY_MS = 1000;
+
+function clearScanStartTimer() {
+  if (scanStartTimer) {
+    clearTimeout(scanStartTimer);
+    scanStartTimer = null;
+  }
+}
 
 function getAudioContext() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -102,7 +111,11 @@ async function startScan(targetId) {
       scanVideo.muted = true;
       videoWrapper.style.display = 'block';
       await scanVideo.play();
-      scanFrame();
+      clearScanStartTimer();
+      scanStartTimer = setTimeout(() => {
+        scanStartTimer = null;
+        scanFrame();
+      }, SCAN_START_DELAY_MS);
       return;
     } catch (error) {
       console.warn('摄像头打开或视频播放失败', error);
@@ -151,7 +164,11 @@ function startQuagga(videoWrapper) {
       videoWrapper.style.display = 'none';
       return;
     }
-    Quagga.start();
+    clearScanStartTimer();
+    scanStartTimer = setTimeout(() => {
+      scanStartTimer = null;
+      if (quaggaRunning) Quagga.start();
+    }, SCAN_START_DELAY_MS);
   });
   Quagga.onDetected(function(result) {
     if (!result || !result.codeResult) return;
@@ -162,6 +179,7 @@ function startQuagga(videoWrapper) {
 }
 
 function stopQuagga() {
+  clearScanStartTimer();
   if (!quaggaRunning) return;
   try {
     Quagga.stop();
@@ -195,6 +213,7 @@ async function scanFrame() {
 }
 
 function stopScan() {
+  clearScanStartTimer();
   stopQuagga();
   const videoWrapper = document.getElementById('videoWrapper');
   const scanVideo = document.getElementById('scanVideo');
