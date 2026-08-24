@@ -10,12 +10,47 @@ let lastRotation = 0;
 let audioContext = null;
 let scanStartTimer = null;
 const SCAN_START_DELAY_MS = 1000;
+const REQUIRED_SCAN_MATCHES = 2;
+let pendingScanCode = '';
+let pendingScanMatches = 0;
 
 function clearScanStartTimer() {
   if (scanStartTimer) {
     clearTimeout(scanStartTimer);
     scanStartTimer = null;
   }
+}
+
+function resetScanCandidate() {
+  pendingScanCode = '';
+  pendingScanMatches = 0;
+}
+
+function isValidJan13(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+  if (digits.length !== 13) return false;
+  let total = 0;
+  for (let index = 0; index < 12; index += 1) {
+    const digit = Number(digits[index]);
+    total += index % 2 === 0 ? digit : digit * 3;
+  }
+  const checkDigit = (10 - (total % 10)) % 10;
+  return checkDigit === Number(digits[12]);
+}
+
+function confirmScanCandidate(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+  if (!isValidJan13(digits)) {
+    resetScanCandidate();
+    return false;
+  }
+  if (digits === pendingScanCode) {
+    pendingScanMatches += 1;
+  } else {
+    pendingScanCode = digits;
+    pendingScanMatches = 1;
+  }
+  return pendingScanMatches >= REQUIRED_SCAN_MATCHES;
 }
 
 function getAudioContext() {
@@ -81,6 +116,7 @@ function formatJpyWithSymbol(value) {
 
 async function startScan(targetId) {
   currentScanTarget = targetId;
+  resetScanCandidate();
   const videoWrapper = document.getElementById('videoWrapper');
   const scanVideo = document.getElementById('scanVideo');
 
@@ -173,8 +209,9 @@ function startQuagga(videoWrapper) {
   Quagga.onDetected(function(result) {
     if (!result || !result.codeResult) return;
     const code = result.codeResult.code;
+    if (!confirmScanCandidate(code)) return;
     stopQuagga();
-    fillBarcode(code);
+    fillBarcode(String(code).replace(/\D/g, ''));
   });
 }
 
@@ -200,8 +237,12 @@ async function scanFrame() {
       const barcodes = await barcodeDetector.detect(scanVideo);
       if (barcodes && barcodes.length > 0) {
         const code = barcodes[0].rawValue;
+        if (!confirmScanCandidate(code)) {
+          requestAnimationFrame(scanFrame);
+          return;
+        }
         stopScan();
-        fillBarcode(code);
+        fillBarcode(String(code).replace(/\D/g, ''));
         return;
       }
     } catch (error) {
@@ -214,6 +255,7 @@ async function scanFrame() {
 
 function stopScan() {
   clearScanStartTimer();
+  resetScanCandidate();
   stopQuagga();
   const videoWrapper = document.getElementById('videoWrapper');
   const scanVideo = document.getElementById('scanVideo');

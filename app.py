@@ -1413,10 +1413,10 @@ def manage_export(fmt):
                 product.stock,
                 "",
             ])
-            sheet.row_dimensions[row_index].height = 72
+            sheet.row_dimensions[row_index].height = 105
 
             barcode_png = ean13_png(product.label_barcode)
-            barcode_image = excel_image_from_bytes(barcode_png.getvalue() if barcode_png else None, max_width=170, max_height=68)
+            barcode_image = excel_image_from_bytes(barcode_png.getvalue() if barcode_png else None, max_width=320, max_height=118)
             if barcode_image:
                 sheet.add_image(barcode_image, f"A{row_index}")
             else:
@@ -1430,7 +1430,7 @@ def manage_export(fmt):
 
         sheet.freeze_panes = "A2"
         widths = {
-            "A": 26,
+            "A": 44,
             "B": 18,
             "C": 26,
             "D": 20,
