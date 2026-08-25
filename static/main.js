@@ -832,7 +832,7 @@ function renderProductResults(products) {
       ${image}
       <span>
         <span class="product-name">${escapeHtml(product.name)}</span>
-        <span class="product-meta">${artistLine}${formatJpyWithSymbol(product.price)} ｜ ${escapeHtml(tr('stock', '库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
+        <span class="product-meta">${artistLine}${formatJpyWithSymbol(product.price)} ｜ ${escapeHtml(tr('storeStock', '店内库存'))} ${product.stock}<br>${escapeHtml(product.barcode)}</span>
       </span>
     `;
     container.appendChild(button);
@@ -892,10 +892,12 @@ function resetInventoryProductForm() {
   const form = document.getElementById('productForm');
   const barcodeInput = document.getElementById('barcode');
   const nameInput = document.getElementById('productName');
+  const warehouseStockInput = document.getElementById('warehouseStock');
   if (form) form.reset();
   if (barcodeInput) {
     barcodeInput.value = '';
   }
+  if (warehouseStockInput) warehouseStockInput.value = '0';
   if (nameInput) nameInput.focus();
 }
 

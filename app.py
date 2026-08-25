@@ -79,6 +79,10 @@ TRANSLATIONS = {
         "image": "图片",
         "price": "单价",
         "stock": "库存",
+        "store_stock": "店内库存",
+        "warehouse_stock": "仓库库存",
+        "restock_alert": "补货提醒",
+        "restock_needed": "需要补货",
         "qty": "数量",
         "subtotal": "小计",
         "action": "操作",
@@ -189,6 +193,10 @@ TRANSLATIONS = {
         "image": "Image",
         "price": "Price",
         "stock": "Stock",
+        "store_stock": "Store Stock",
+        "warehouse_stock": "Warehouse Stock",
+        "restock_alert": "Restock Alert",
+        "restock_needed": "Restock Needed",
         "qty": "Qty",
         "subtotal": "Subtotal",
         "action": "Action",
@@ -299,6 +307,10 @@ TRANSLATIONS = {
         "image": "画像",
         "price": "単価",
         "stock": "在庫",
+        "store_stock": "店内在庫",
+        "warehouse_stock": "倉庫在庫",
+        "restock_alert": "補充通知",
+        "restock_needed": "補充が必要",
         "qty": "数量",
         "subtotal": "小計",
         "action": "操作",
@@ -404,6 +416,7 @@ class Product(db.Model):
     artist = db.Column(db.String(256), nullable=False, default="")
     price = db.Column(db.Float, nullable=False, default=0.0)
     stock = db.Column(db.Integer, nullable=False, default=0)
+    warehouse_stock = db.Column(db.Integer, nullable=False, default=0)
     image = db.Column(db.String(512), nullable=True)
     image_data = db.Column(db.LargeBinary, nullable=True)
     image_mime = db.Column(db.String(128), nullable=True)
@@ -417,6 +430,8 @@ class Product(db.Model):
             "artist": self.artist or "",
             "price": self.price,
             "stock": self.stock,
+            "warehouse_stock": self.warehouse_stock or 0,
+            "restock_needed": (self.stock or 0) < 5,
             "image": self.image,
             "has_image": has_image,
             "image_url": f"/product-image/{self.barcode}" if has_image else None,
@@ -478,6 +493,8 @@ def ensure_schema():
         product_columns = {column["name"] for column in inspector.get_columns("products")}
         if "label_barcode" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN label_barcode VARCHAR(32)"))
+        if "warehouse_stock" not in product_columns:
+            db.session.execute(text("ALTER TABLE products ADD COLUMN warehouse_stock INTEGER NOT NULL DEFAULT 0"))
         if "artist" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN artist VARCHAR(256) NOT NULL DEFAULT ''"))
         if "image_data" not in product_columns:
@@ -534,6 +551,18 @@ def unique_product_barcode(name):
         if not Product.query.get(barcode):
             return barcode
     return generate_product_barcode(name, datetime.now(APP_TIMEZONE).isoformat())
+
+
+def ensure_product_barcode(product_data):
+    if product_data.get("barcode"):
+        return
+    label_barcode = product_data.get("label_barcode")
+    if label_barcode:
+        existing = Product.query.filter(Product.label_barcode == label_barcode).first()
+        if existing:
+            product_data["barcode"] = existing.barcode
+            return
+    product_data["barcode"] = unique_product_barcode(product_data.get("name", ""))
 
 
 def ensure_unique_label_barcode(product):
@@ -764,14 +793,14 @@ def save_inventory(data):
                 "name": str(item.get("name", "") or "").strip(),
                 "artist": str(item.get("artist", "") or "").strip(),
                 "price": float(item.get("price", 0) or 0),
-                "stock": int(item.get("stock", 0) or 0),
+                "stock": int((item.get("store_stock") if item.get("store_stock") not in (None, "") else item.get("stock", 0)) or 0),
+                "warehouse_stock": int(item.get("warehouse_stock", 0) or 0),
                 "image": str(item.get("image", "") or None) if item.get("image") else None,
             }
         except (ValueError, TypeError):
             continue
         if product_data["name"]:
-            if not product_data["barcode"]:
-                product_data["barcode"] = unique_product_barcode(product_data["name"])
+            ensure_product_barcode(product_data)
             update_product(product_data)
 
 
@@ -894,6 +923,7 @@ def update_product(product):
             ensure_unique_label_barcode(existing)
         existing.price = product["price"]
         existing.stock = product["stock"]
+        existing.warehouse_stock = product.get("warehouse_stock", existing.warehouse_stock) or 0
         existing.image = product.get("image")
         if "image_data" in product:
             existing.image_data = product.get("image_data")
@@ -906,6 +936,7 @@ def update_product(product):
             label_barcode=product.get("label_barcode") or None,
             price=product["price"],
             stock=product["stock"],
+            warehouse_stock=product.get("warehouse_stock", 0) or 0,
             image=product.get("image"),
             image_data=product.get("image_data"),
             image_mime=product.get("image_mime"),
@@ -1164,7 +1195,8 @@ def parse_inventory_file(file_storage):
                     "name": str(row.get("name", "")).strip(),
                     "artist": str(row.get("artist", "") or "").strip(),
                     "price": float(row.get("price", 0)),
-                    "stock": int(row.get("stock", 0)),
+                    "stock": int((row.get("store_stock") if row.get("store_stock") not in (None, "") else row.get("stock", 0)) or 0),
+                    "warehouse_stock": int(row.get("warehouse_stock", 0) or 0),
                     "image": str(row.get("image", "")).strip() or None,
                 })
             except ValueError:
@@ -1176,9 +1208,11 @@ def parse_inventory_file(file_storage):
         headers = [str(cell.value).strip().lower() if cell.value else "" for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
         products = []
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not row or not row[0]:
+            if not row:
                 continue
             row_data = dict(zip(headers, row))
+            if not row_data.get("name"):
+                continue
             try:
                 products.append({
                     "barcode": str(row_data.get("barcode", "")).strip(),
@@ -1186,7 +1220,8 @@ def parse_inventory_file(file_storage):
                     "name": str(row_data.get("name", "")).strip(),
                     "artist": str(row_data.get("artist", "") or "").strip(),
                     "price": float(row_data.get("price", 0) or 0),
-                    "stock": int(row_data.get("stock", 0) or 0),
+                    "stock": int((row_data.get("store_stock") if row_data.get("store_stock") not in (None, "") else row_data.get("stock", 0)) or 0),
+                    "warehouse_stock": int(row_data.get("warehouse_stock", 0) or 0),
                     "image": str(row_data.get("image", "")).strip() or None,
                 })
             except ValueError:
@@ -1282,6 +1317,7 @@ def manage_add():
     artist = request.form.get("artist", "").strip()
     price = request.form.get("price", "").strip()
     stock = request.form.get("stock", "").strip()
+    warehouse_stock = request.form.get("warehouse_stock", "").strip() or "0"
     image_file = request.files.get("image")
 
     if not name or not price or not stock:
@@ -1290,10 +1326,11 @@ def manage_add():
     try:
         price = float(price)
         stock = int(stock)
+        warehouse_stock = int(warehouse_stock)
     except ValueError:
         flash("价格必须是数字，库存必须是整数", "error")
         return redirect(url_for("manage"))
-    if price < 0 or stock < 0:
+    if price < 0 or stock < 0 or warehouse_stock < 0:
         flash("价格和库存不能为负数", "error")
         return redirect(url_for("manage"))
 
@@ -1315,6 +1352,7 @@ def manage_add():
         "artist": artist,
         "price": price,
         "stock": stock,
+        "warehouse_stock": warehouse_stock,
         "image": image_path,
         "image_data": image_data,
         "image_mime": image_mime,
@@ -1359,6 +1397,7 @@ def manage_import():
     try:
         products = parse_inventory_file(inventory_file)
         for product in products:
+            ensure_product_barcode(product)
             update_product(product)
         flash(f"已导入 {len(products)} 条商品", "success")
     except ValueError as exc:
@@ -1372,7 +1411,7 @@ def manage_export(fmt):
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["label_barcode", "name", "artist", "price", "stock", "image"])
+        writer.writerow(["label_barcode", "name", "artist", "price", "store_stock", "warehouse_stock", "image"])
         for product in inventory:
             writer.writerow([
                 product.get("label_barcode", ""),
@@ -1380,6 +1419,7 @@ def manage_export(fmt):
                 product.get("artist", ""),
                 product.get("price", ""),
                 product.get("stock", ""),
+                product.get("warehouse_stock", ""),
                 product.get("image", ""),
             ])
         data = output.getvalue().encode("utf-8-sig")
@@ -1399,7 +1439,8 @@ def manage_export(fmt):
             "name",
             "artist",
             "price",
-            "stock",
+            "store_stock",
+            "warehouse_stock",
             "product_image",
         ])
         product_rows = Product.query.order_by(Product.barcode).all()
@@ -1411,6 +1452,7 @@ def manage_export(fmt):
                 product.artist or "",
                 product.price,
                 product.stock,
+                product.warehouse_stock,
                 "",
             ])
             sheet.row_dimensions[row_index].height = 105
@@ -1424,9 +1466,9 @@ def manage_export(fmt):
 
             photo_image = excel_image_from_bytes(product_image_bytes(product), max_width=86, max_height=68)
             if photo_image:
-                sheet.add_image(photo_image, f"G{row_index}")
+                sheet.add_image(photo_image, f"H{row_index}")
             else:
-                sheet.cell(row=row_index, column=7, value=product.image or "")
+                sheet.cell(row=row_index, column=8, value=product.image or "")
 
         sheet.freeze_panes = "A2"
         widths = {
@@ -1436,7 +1478,8 @@ def manage_export(fmt):
             "D": 20,
             "E": 10,
             "F": 10,
-            "G": 16,
+            "G": 12,
+            "H": 16,
         }
         for column, width in widths.items():
             sheet.column_dimensions[column].width = width
