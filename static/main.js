@@ -930,7 +930,6 @@ function renderInventoryArtists() {
       button.innerHTML = `
         <span class="product-name">${escapeHtml(inventoryArtistLabel(artistName))}</span>
         <span class="product-meta">${escapeHtml(tr('artistProductCount', '{count} 件商品', { count: artistInfo.count }))}</span>
-        ${artistInfo.restockNeeded ? `<span class="artist-restock-note">${escapeHtml(tr('restockNeeded', '需要补货'))}</span>` : ''}
       `;
       artistContainer.appendChild(button);
     });
