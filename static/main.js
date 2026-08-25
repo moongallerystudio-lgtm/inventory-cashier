@@ -5,6 +5,7 @@ let barcodeDetector = null;
 let quaggaRunning = false;
 let currentMember = null;
 let activeArtistFilter = null;
+let activeInventoryArtist = null;
 let lastImageDataUrl = null;
 let lastRotation = 0;
 let audioContext = null;
@@ -869,16 +870,108 @@ function renderArtistResults(artists) {
   if (status) status.textContent = tr('foundArtists', '找到 {count} 位艺术家。', { count: artists.length });
 }
 
+function inventoryRows() {
+  return Array.from(document.querySelectorAll('.inventory-row'));
+}
+
+function normalizeArtistName(name) {
+  return String(name || '').trim();
+}
+
+function inventoryArtistLabel(artistName) {
+  return artistName || tr('noArtistName', '未设置艺术家');
+}
+
+function renderInventoryArtists() {
+  const artistContainer = document.getElementById('inventoryArtistResults');
+  const tableWrap = document.getElementById('inventoryTableWrap');
+  const activeArtistBar = document.getElementById('inventoryActiveArtist');
+  const noMatchRow = document.getElementById('inventoryNoMatchRow');
+  const input = document.getElementById('inventorySearch');
+  const rows = inventoryRows();
+  if (!artistContainer) return;
+
+  activeInventoryArtist = null;
+  artistContainer.innerHTML = '';
+  if (tableWrap) tableWrap.style.display = 'none';
+  if (activeArtistBar) activeArtistBar.classList.remove('show');
+  if (noMatchRow) noMatchRow.style.display = 'none';
+  rows.forEach(row => {
+    row.style.display = 'none';
+  });
+
+  const keyword = input ? input.value.trim().toLowerCase() : '';
+  const artists = new Map();
+  rows.forEach(row => {
+    const artistName = normalizeArtistName(row.dataset.artist);
+    const label = inventoryArtistLabel(artistName);
+    if (keyword && !label.toLowerCase().includes(keyword)) return;
+    artists.set(artistName, (artists.get(artistName) || 0) + 1);
+  });
+
+  if (artists.size === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'notice';
+    empty.textContent = rows.length === 0 ? tr('noProductsFound', '没有找到匹配商品。') : tr('noArtistsFound', '没有找到匹配艺术家。');
+    artistContainer.appendChild(empty);
+    return;
+  }
+
+  Array.from(artists.entries())
+    .sort((a, b) => inventoryArtistLabel(a[0]).localeCompare(inventoryArtistLabel(b[0])))
+    .forEach(([artistName, count]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'artist-tile';
+      button.onclick = () => showInventoryArtistProducts(artistName);
+      button.innerHTML = `
+        <span class="product-name">${escapeHtml(inventoryArtistLabel(artistName))}</span>
+        <span class="product-meta">${escapeHtml(tr('artistProductCount', '{count} 件商品', { count }))}</span>
+      `;
+      artistContainer.appendChild(button);
+    });
+}
+
+function showInventoryArtistProducts(artistName) {
+  activeInventoryArtist = normalizeArtistName(artistName);
+  const artistContainer = document.getElementById('inventoryArtistResults');
+  const tableWrap = document.getElementById('inventoryTableWrap');
+  const activeArtistBar = document.getElementById('inventoryActiveArtist');
+  const activeArtistName = document.getElementById('inventoryActiveArtistName');
+  const backButton = document.getElementById('backToInventoryArtists');
+
+  if (artistContainer) artistContainer.innerHTML = '';
+  if (tableWrap) tableWrap.style.display = '';
+  if (activeArtistBar) activeArtistBar.classList.add('show');
+  if (activeArtistName) activeArtistName.textContent = inventoryArtistLabel(activeInventoryArtist);
+  if (backButton) {
+    backButton.textContent = tr('backToArtists', '返回艺术家列表');
+    backButton.onclick = () => {
+      const input = document.getElementById('inventorySearch');
+      if (input) input.value = '';
+      renderInventoryArtists();
+    };
+  }
+  filterInventoryTable();
+}
+
 function filterInventoryTable() {
   const input = document.getElementById('inventorySearch');
-  const rows = Array.from(document.querySelectorAll('.inventory-row'));
+  const rows = inventoryRows();
   const noMatchRow = document.getElementById('inventoryNoMatchRow');
+
+  if (document.getElementById('inventoryArtistResults') && activeInventoryArtist === null) {
+    renderInventoryArtists();
+    return;
+  }
+
   const keyword = input ? input.value.trim().toLowerCase() : '';
   let visibleCount = 0;
 
   for (const row of rows) {
     const haystack = row.dataset.search || row.textContent.toLowerCase();
-    const visible = !keyword || haystack.includes(keyword);
+    const artistMatches = normalizeArtistName(row.dataset.artist) === activeInventoryArtist;
+    const visible = artistMatches && (!keyword || haystack.includes(keyword));
     row.style.display = visible ? '' : 'none';
     if (visible) visibleCount += 1;
   }
@@ -1160,6 +1253,7 @@ document.addEventListener('DOMContentLoaded', function() {
         filterInventoryTable();
       }
     });
+    renderInventoryArtists();
   }
 
   const clearInventorySearch = document.getElementById('clearInventorySearch');
@@ -1169,7 +1263,11 @@ document.addEventListener('DOMContentLoaded', function() {
         inventorySearch.value = '';
         inventorySearch.focus();
       }
-      filterInventoryTable();
+      if (activeInventoryArtist === null) {
+        renderInventoryArtists();
+      } else {
+        filterInventoryTable();
+      }
     });
   }
 
