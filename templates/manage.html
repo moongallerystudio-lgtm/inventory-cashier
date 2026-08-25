@@ -36,6 +36,9 @@
     .artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 12px; }
     .artist-tile { width: 100%; min-height: 70px; padding: 12px; border: 1px solid #d7e0ea; border-radius: 8px; background: #fff; color: #1f2937; text-align: left; cursor: pointer; }
     .artist-tile:hover { border-color: #2563eb; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14); }
+    .artist-tile.restock-needed { border-color: #fca5a5; background: #fef2f2; color: #7f1d1d; }
+    .artist-tile.restock-needed:hover { border-color: #dc2626; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.16); }
+    .artist-tile .artist-restock-note { display: inline-flex; align-items: center; min-height: 24px; margin-top: 6px; padding: 0 8px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 12px; font-weight: 700; }
     .inventory-active-artist { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
     .inventory-active-artist.show { display: flex; }
     .inventory-artist-title { font-weight: 700; color: #334155; }
@@ -139,7 +142,7 @@
             </thead>
             <tbody id="inventoryTableBody">
               {% for product in inventory %}
-                <tr class="inventory-row" data-artist="{{ product.artist or '' }}" data-search="{{ (product.name ~ ' ' ~ product.label_barcode)|lower }}">
+                <tr class="inventory-row" data-artist="{{ product.artist or '' }}" data-restock="{{ '1' if product.restock_needed else '0' }}" data-search="{{ (product.name ~ ' ' ~ product.label_barcode)|lower }}">
                   <td>
                     {% if product.label_barcode %}
                       <img class="label-barcode" src="/product-label-barcode/{{ product.barcode|urlencode }}" alt="{{ product.label_barcode }}">
@@ -205,6 +208,7 @@
         en: "{count} products",
         ja: "{count} 件の商品"
       }[{{ current_lang()|tojson }}],
+      restockNeeded: {{ t('restock_needed')|tojson }},
       foundProducts: {
         zh: "找到 {count} 个商品。",
         en: "Found {count} products.",
@@ -218,7 +222,7 @@
     });
   </script>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js?v=20260825-inventory-artists"></script>
+  <script src="/static/main.js?v=20260825-inventory-restock-artists"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->

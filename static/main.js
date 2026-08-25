@@ -906,7 +906,10 @@ function renderInventoryArtists() {
     const artistName = normalizeArtistName(row.dataset.artist);
     const label = inventoryArtistLabel(artistName);
     if (keyword && !label.toLowerCase().includes(keyword)) return;
-    artists.set(artistName, (artists.get(artistName) || 0) + 1);
+    const current = artists.get(artistName) || { count: 0, restockNeeded: false };
+    current.count += 1;
+    current.restockNeeded = current.restockNeeded || row.dataset.restock === '1';
+    artists.set(artistName, current);
   });
 
   if (artists.size === 0) {
@@ -919,14 +922,15 @@ function renderInventoryArtists() {
 
   Array.from(artists.entries())
     .sort((a, b) => inventoryArtistLabel(a[0]).localeCompare(inventoryArtistLabel(b[0])))
-    .forEach(([artistName, count]) => {
+    .forEach(([artistName, artistInfo]) => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'artist-tile';
+      button.className = artistInfo.restockNeeded ? 'artist-tile restock-needed' : 'artist-tile';
       button.onclick = () => showInventoryArtistProducts(artistName);
       button.innerHTML = `
         <span class="product-name">${escapeHtml(inventoryArtistLabel(artistName))}</span>
-        <span class="product-meta">${escapeHtml(tr('artistProductCount', '{count} 件商品', { count }))}</span>
+        <span class="product-meta">${escapeHtml(tr('artistProductCount', '{count} 件商品', { count: artistInfo.count }))}</span>
+        ${artistInfo.restockNeeded ? `<span class="artist-restock-note">${escapeHtml(tr('restockNeeded', '需要补货'))}</span>` : ''}
       `;
       artistContainer.appendChild(button);
     });
