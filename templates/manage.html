@@ -66,8 +66,9 @@
       .form-row, .search-row { grid-template-columns: 1fr; }
       .button { width: 100%; }
       .inventory-table-wrap { max-height: 685px; }
-      table { min-width: 0; table-layout: fixed; }
-      th, td { padding: 8px 6px; font-size: 13px; word-break: break-word; }
+      .table-wrap { width: 100%; overflow-x: auto; }
+      table { min-width: 1240px; table-layout: auto; }
+      th, td { padding: 10px 12px; font-size: 13px; word-break: normal; white-space: nowrap; }
       th { font-size: 12px; }
       .action-cell, .action-cell form { flex-direction: column; width: 100%; }
       .product-image { width: 48px; height: 48px; }
@@ -223,7 +224,7 @@
     });
   </script>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js?v=20260831-gross-margin"></script>
+  <script src="/static/main.js?v=20260831-inventory-scroll"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->
