@@ -765,6 +765,17 @@ def gross_margin_percent(price, cost_price):
     return round((price_value - cost_value) / price_value * 100, 1)
 
 
+def cost_price_from_gross_margin(price, gross_margin):
+    try:
+        price_value = float(price or 0)
+        margin_value = float(gross_margin or 0)
+    except (TypeError, ValueError):
+        return 0
+    if price_value <= 0:
+        return 0
+    return round(price_value * (1 - margin_value / 100), 2)
+
+
 def format_percent(value):
     if value is None:
         return "-"
@@ -1224,6 +1235,13 @@ def sale_export_rows(rows):
     return export_rows
 
 
+def inventory_row_cost_price(price, row):
+    gross_margin = row.get("gross_margin")
+    if gross_margin not in (None, ""):
+        return cost_price_from_gross_margin(price, gross_margin)
+    return float(row.get("cost_price", 0) or 0)
+
+
 def parse_inventory_file(file_storage):
     filename = file_storage.filename or ""
     suffix = Path(filename).suffix.lower()
@@ -1235,13 +1253,14 @@ def parse_inventory_file(file_storage):
             if not row.get("name"):
                 continue
             try:
+                price = float(row.get("price", 0))
                 products.append({
                     "barcode": str(row.get("barcode", "")).strip(),
                     "label_barcode": str(row.get("label_barcode", "") or "").strip(),
                     "name": str(row.get("name", "")).strip(),
                     "artist": str(row.get("artist", "") or "").strip(),
-                    "price": float(row.get("price", 0)),
-                    "cost_price": float(row.get("cost_price", 0) or 0),
+                    "price": price,
+                    "cost_price": inventory_row_cost_price(price, row),
                     "stock": int((row.get("store_stock") if row.get("store_stock") not in (None, "") else row.get("stock", 0)) or 0),
                     "warehouse_stock": int(row.get("warehouse_stock", 0) or 0),
                     "image": str(row.get("image", "")).strip() or None,
@@ -1261,13 +1280,14 @@ def parse_inventory_file(file_storage):
             if not row_data.get("name"):
                 continue
             try:
+                price = float(row_data.get("price", 0) or 0)
                 products.append({
                     "barcode": str(row_data.get("barcode", "")).strip(),
                     "label_barcode": str(row_data.get("label_barcode", "") or "").strip(),
                     "name": str(row_data.get("name", "")).strip(),
                     "artist": str(row_data.get("artist", "") or "").strip(),
-                    "price": float(row_data.get("price", 0) or 0),
-                    "cost_price": float(row_data.get("cost_price", 0) or 0),
+                    "price": price,
+                    "cost_price": inventory_row_cost_price(price, row_data),
                     "stock": int((row_data.get("store_stock") if row_data.get("store_stock") not in (None, "") else row_data.get("stock", 0)) or 0),
                     "warehouse_stock": int(row_data.get("warehouse_stock", 0) or 0),
                     "image": str(row_data.get("image", "")).strip() or None,
@@ -1355,7 +1375,8 @@ def manage():
     inventory = load_inventory()
     edit_barcode = request.args.get("edit", "").strip()
     edit_product = find_product(edit_barcode) if edit_barcode else None
-    return render_template("manage.html", inventory=inventory, edit_product=edit_product)
+    edit_gross_margin = gross_margin_percent(edit_product.price, edit_product.cost_price) if edit_product else 0
+    return render_template("manage.html", inventory=inventory, edit_product=edit_product, edit_gross_margin=edit_gross_margin)
 
 
 @app.route("/manage/add", methods=["POST"])
@@ -1364,7 +1385,7 @@ def manage_add():
     name = request.form.get("name", "").strip()
     artist = request.form.get("artist", "").strip()
     price = request.form.get("price", "").strip()
-    cost_price = request.form.get("cost_price", "").strip() or "0"
+    gross_margin = request.form.get("gross_margin", "").strip() or "0"
     stock = request.form.get("stock", "").strip()
     warehouse_stock = request.form.get("warehouse_stock", "").strip() or "0"
     image_file = request.files.get("image")
@@ -1374,14 +1395,14 @@ def manage_add():
         return redirect(url_for("manage"))
     try:
         price = float(price)
-        cost_price = float(cost_price)
+        gross_margin = float(gross_margin)
         stock = int(stock)
         warehouse_stock = int(warehouse_stock)
     except ValueError:
-        flash("价格必须是数字，库存必须是整数", "error")
+        flash("价格和毛利率必须是数字，库存必须是整数", "error")
         return redirect(url_for("manage"))
-    if price < 0 or cost_price < 0 or stock < 0 or warehouse_stock < 0:
-        flash("价格和库存不能为负数", "error")
+    if price < 0 or gross_margin > 100 or stock < 0 or warehouse_stock < 0:
+        flash("价格和库存不能为负数，毛利率不能超过 100%", "error")
         return redirect(url_for("manage"))
 
     if not barcode:
@@ -1401,7 +1422,7 @@ def manage_add():
         "name": name,
         "artist": artist,
         "price": price,
-        "cost_price": cost_price,
+        "cost_price": cost_price_from_gross_margin(price, gross_margin),
         "stock": stock,
         "warehouse_stock": warehouse_stock,
         "image": image_path,
@@ -1462,14 +1483,13 @@ def manage_export(fmt):
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["label_barcode", "name", "artist", "price", "cost_price", "gross_margin", "store_stock", "warehouse_stock", "image"])
+        writer.writerow(["label_barcode", "name", "artist", "price", "gross_margin", "store_stock", "warehouse_stock", "image"])
         for product in inventory:
             writer.writerow([
                 product.get("label_barcode", ""),
                 product.get("name", ""),
                 product.get("artist", ""),
                 product.get("price", ""),
-                product.get("cost_price", ""),
                 product.get("gross_margin", ""),
                 product.get("stock", ""),
                 product.get("warehouse_stock", ""),
@@ -1492,7 +1512,6 @@ def manage_export(fmt):
             "name",
             "artist",
             "price",
-            "cost_price",
             "gross_margin",
             "store_stock",
             "warehouse_stock",
@@ -1506,7 +1525,6 @@ def manage_export(fmt):
                 product.name,
                 product.artist or "",
                 product.price,
-                product.cost_price or 0,
                 gross_margin_percent(product.price, product.cost_price),
                 product.stock,
                 product.warehouse_stock,
@@ -1523,9 +1541,9 @@ def manage_export(fmt):
 
             photo_image = excel_image_from_bytes(product_image_bytes(product), max_width=86, max_height=68)
             if photo_image:
-                sheet.add_image(photo_image, f"J{row_index}")
+                sheet.add_image(photo_image, f"I{row_index}")
             else:
-                sheet.cell(row=row_index, column=10, value=product.image or "")
+                sheet.cell(row=row_index, column=9, value=product.image or "")
 
         sheet.freeze_panes = "A2"
         widths = {
@@ -1535,10 +1553,9 @@ def manage_export(fmt):
             "D": 20,
             "E": 10,
             "F": 10,
-            "G": 10,
+            "G": 12,
             "H": 12,
-            "I": 12,
-            "J": 16,
+            "I": 16,
         }
         for column, width in widths.items():
             sheet.column_dimensions[column].width = width

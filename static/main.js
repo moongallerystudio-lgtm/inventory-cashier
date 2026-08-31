@@ -988,13 +988,13 @@ function resetInventoryProductForm() {
   const form = document.getElementById('productForm');
   const barcodeInput = document.getElementById('barcode');
   const nameInput = document.getElementById('productName');
-  const costPriceInput = document.getElementById('productCostPrice');
+  const grossMarginInput = document.getElementById('productGrossMargin');
   const warehouseStockInput = document.getElementById('warehouseStock');
   if (form) form.reset();
   if (barcodeInput) {
     barcodeInput.value = '';
   }
-  if (costPriceInput) costPriceInput.value = '0';
+  if (grossMarginInput) grossMarginInput.value = '0';
   if (warehouseStockInput) warehouseStockInput.value = '0';
   if (nameInput) nameInput.focus();
 }

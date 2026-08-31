@@ -27,7 +27,7 @@
     input[type=text], input[type=number], input[type=file], input[type=search] { width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: #fff; }
     .table-wrap { min-width: 0; overflow-x: auto; margin-top: 12px; border: 1px solid #dde5ee; border-radius: 8px; -webkit-overflow-scrolling: touch; }
     .inventory-table-wrap { max-height: 925px; overflow: auto; }
-    table { width: 100%; min-width: 1240px; border-collapse: collapse; }
+    table { width: 100%; min-width: 1160px; border-collapse: collapse; }
     th, td { padding: 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: middle; }
     th { background: #f1f5f9; color: #334155; font-size: 14px; }
     .inventory-table-wrap th { position: sticky; top: 0; z-index: 1; }
@@ -67,7 +67,7 @@
       .button { width: 100%; }
       .inventory-table-wrap { max-height: 685px; }
       .table-wrap { width: 100%; overflow-x: auto; }
-      table { min-width: 1240px; table-layout: auto; }
+      table { min-width: 1160px; table-layout: auto; }
       th, td { padding: 10px 12px; font-size: 13px; word-break: normal; white-space: nowrap; }
       th { font-size: 12px; }
       .action-cell, .action-cell form { flex-direction: column; width: 100%; }
@@ -100,7 +100,7 @@
             <label>{{ t('product_name') }}<input type="text" name="name" id="productName" placeholder="{{ t('product_name') }}" value="{{ edit_product.name if edit_product else '' }}" required></label>
             <label>{{ t('artist') }}<input type="text" name="artist" id="productArtist" placeholder="{{ t('artist') }}" value="{{ edit_product.artist if edit_product else '' }}"></label>
             <label>{{ t('price') }}<input type="number" name="price" id="productPrice" step="1" placeholder="120" value="{{ edit_product.price|jpy if edit_product else '' }}" required></label>
-            <label>{{ t('cost_price') }}<input type="number" name="cost_price" id="productCostPrice" step="1" placeholder="60" value="{{ edit_product.cost_price|jpy if edit_product else '0' }}" required></label>
+            <label>{{ t('gross_margin') }}<input type="number" name="gross_margin" id="productGrossMargin" step="0.1" placeholder="40" value="{{ edit_gross_margin if edit_gross_margin is not none else '0' }}" required></label>
             <label>{{ t('store_stock') }}<input type="number" name="stock" id="productStock" step="1" placeholder="100" value="{{ edit_product.stock if edit_product else '' }}" required></label>
             <label>{{ t('warehouse_stock') }}<input type="number" name="warehouse_stock" id="warehouseStock" step="1" placeholder="0" value="{{ edit_product.warehouse_stock if edit_product else '0' }}" required></label>
           </div>
@@ -141,7 +141,7 @@
         <div id="inventoryTableWrap" class="table-wrap inventory-table-wrap" style="display:none;">
           <table>
             <thead>
-              <tr><th>{{ t('product_label_barcode') }}</th><th>{{ t('product') }}</th><th>{{ t('artist') }}</th><th>{{ t('image') }}</th><th>{{ t('price') }}</th><th>{{ t('cost_price') }}</th><th>{{ t('gross_margin') }}</th><th>{{ t('store_stock') }}</th><th>{{ t('warehouse_stock') }}</th><th>{{ t('action') }}</th></tr>
+              <tr><th>{{ t('product_label_barcode') }}</th><th>{{ t('product') }}</th><th>{{ t('artist') }}</th><th>{{ t('image') }}</th><th>{{ t('price') }}</th><th>{{ t('gross_margin') }}</th><th>{{ t('store_stock') }}</th><th>{{ t('warehouse_stock') }}</th><th>{{ t('action') }}</th></tr>
             </thead>
             <tbody id="inventoryTableBody">
               {% for product in inventory %}
@@ -158,7 +158,6 @@
                   <td>{{ product.artist or '-' }}</td>
                   <td>{% if product.image_url %}<img class="product-image" src="{{ product.image_url }}" alt="{{ product.name }}" onerror="this.onerror=null;this.src='/static/logo.jpg';">{% else %}-{% endif %}</td>
                   <td>¥{{ product.price|jpy }}</td>
-                  <td>¥{{ product.cost_price|jpy }}</td>
                   <td>{{ product.gross_margin|percent }}</td>
                   <td>{{ product.stock }}</td>
                   <td>{{ product.warehouse_stock }}</td>
@@ -170,9 +169,9 @@
                   </td>
                 </tr>
               {% else %}
-                <tr class="inventory-empty-row"><td colspan="10">{{ t('no_products') }}</td></tr>
+                <tr class="inventory-empty-row"><td colspan="9">{{ t('no_products') }}</td></tr>
               {% endfor %}
-              <tr id="inventoryNoMatchRow" style="display:none;"><td colspan="10">{{ t('no_products_found') }}</td></tr>
+              <tr id="inventoryNoMatchRow" style="display:none;"><td colspan="9">{{ t('no_products_found') }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -225,7 +224,7 @@
     });
   </script>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js?v=20260831-inventory-scroll"></script>
+  <script src="/static/main.js?v=20260831-gross-margin-input"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->
