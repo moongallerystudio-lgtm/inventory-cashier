@@ -78,6 +78,8 @@ TRANSLATIONS = {
         "artist": "艺术家",
         "image": "图片",
         "price": "单价",
+        "cost_price": "成本价",
+        "gross_margin": "毛利率",
         "stock": "库存",
         "store_stock": "店内库存",
         "warehouse_stock": "仓库库存",
@@ -190,6 +192,8 @@ TRANSLATIONS = {
         "artist": "Artist",
         "image": "Image",
         "price": "Price",
+        "cost_price": "Cost",
+        "gross_margin": "Gross Margin",
         "stock": "Stock",
         "store_stock": "Store Stock",
         "warehouse_stock": "Warehouse Stock",
@@ -302,6 +306,8 @@ TRANSLATIONS = {
         "artist": "アーティスト",
         "image": "画像",
         "price": "単価",
+        "cost_price": "原価",
+        "gross_margin": "粗利率",
         "stock": "在庫",
         "store_stock": "店内在庫",
         "warehouse_stock": "倉庫在庫",
@@ -409,6 +415,7 @@ class Product(db.Model):
     name = db.Column(db.String(256), nullable=False)
     artist = db.Column(db.String(256), nullable=False, default="")
     price = db.Column(db.Float, nullable=False, default=0.0)
+    cost_price = db.Column(db.Float, nullable=False, default=0.0)
     stock = db.Column(db.Integer, nullable=False, default=0)
     warehouse_stock = db.Column(db.Integer, nullable=False, default=0)
     image = db.Column(db.String(512), nullable=True)
@@ -423,6 +430,8 @@ class Product(db.Model):
             "name": self.name,
             "artist": self.artist or "",
             "price": self.price,
+            "cost_price": self.cost_price or 0,
+            "gross_margin": gross_margin_percent(self.price, self.cost_price),
             "stock": self.stock,
             "warehouse_stock": self.warehouse_stock or 0,
             "restock_needed": (self.stock or 0) < 5,
@@ -465,6 +474,7 @@ class SaleItem(db.Model):
     barcode = db.Column(db.String(128), nullable=False)
     name = db.Column(db.String(256), nullable=False)
     price = db.Column(db.Float, nullable=False, default=0.0)
+    cost_price = db.Column(db.Float, nullable=False, default=0.0)
     qty = db.Column(db.Integer, nullable=False, default=0)
     subtotal = db.Column(db.Float, nullable=False, default=0.0)
 
@@ -489,6 +499,8 @@ def ensure_schema():
             db.session.execute(text("ALTER TABLE products ADD COLUMN label_barcode VARCHAR(32)"))
         if "warehouse_stock" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN warehouse_stock INTEGER NOT NULL DEFAULT 0"))
+        if "cost_price" not in product_columns:
+            db.session.execute(text("ALTER TABLE products ADD COLUMN cost_price FLOAT NOT NULL DEFAULT 0"))
         if "artist" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN artist VARCHAR(256) NOT NULL DEFAULT ''"))
         if "image_data" not in product_columns:
@@ -503,6 +515,11 @@ def ensure_schema():
     if "payment_method" not in sale_columns:
         db.session.execute(text("ALTER TABLE sales ADD COLUMN payment_method VARCHAR(64) NOT NULL DEFAULT '未记录'"))
         db.session.commit()
+    if "sale_items" in table_names:
+        sale_item_columns = {column["name"] for column in inspector.get_columns("sale_items")}
+        if "cost_price" not in sale_item_columns:
+            db.session.execute(text("ALTER TABLE sale_items ADD COLUMN cost_price FLOAT NOT NULL DEFAULT 0"))
+            db.session.commit()
 
 
 def backfill_product_image_data():
@@ -737,7 +754,28 @@ def format_jpy(value):
         return "0"
 
 
+def gross_margin_percent(price, cost_price):
+    try:
+        price_value = float(price or 0)
+        cost_value = float(cost_price or 0)
+    except (TypeError, ValueError):
+        return None
+    if price_value <= 0:
+        return None
+    return round((price_value - cost_value) / price_value * 100, 1)
+
+
+def format_percent(value):
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.1f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
 app.jinja_env.filters["jpy"] = format_jpy
+app.jinja_env.filters["percent"] = format_percent
 
 
 def local_now():
@@ -787,6 +825,7 @@ def save_inventory(data):
                 "name": str(item.get("name", "") or "").strip(),
                 "artist": str(item.get("artist", "") or "").strip(),
                 "price": float(item.get("price", 0) or 0),
+                "cost_price": float(item.get("cost_price", 0) or 0),
                 "stock": int((item.get("store_stock") if item.get("store_stock") not in (None, "") else item.get("stock", 0)) or 0),
                 "warehouse_stock": int(item.get("warehouse_stock", 0) or 0),
                 "image": str(item.get("image", "") or None) if item.get("image") else None,
@@ -916,6 +955,7 @@ def update_product(product):
         if not existing.label_barcode:
             ensure_unique_label_barcode(existing)
         existing.price = product["price"]
+        existing.cost_price = product.get("cost_price", existing.cost_price) or 0
         existing.stock = product["stock"]
         existing.warehouse_stock = product.get("warehouse_stock", existing.warehouse_stock) or 0
         existing.image = product.get("image")
@@ -929,6 +969,7 @@ def update_product(product):
             artist=product.get("artist", "") or "",
             label_barcode=product.get("label_barcode") or None,
             price=product["price"],
+            cost_price=product.get("cost_price", 0) or 0,
             stock=product["stock"],
             warehouse_stock=product.get("warehouse_stock", 0) or 0,
             image=product.get("image"),
@@ -1105,6 +1146,11 @@ def sale_rows(sales):
     rows = []
     daily_numbers = {}
     sales_by_date = {}
+    item_barcodes = {item.barcode for sale in sales for item in sale.items if item.barcode}
+    products = {
+        product.barcode: product
+        for product in Product.query.filter(Product.barcode.in_(item_barcodes)).all()
+    } if item_barcodes else {}
     for sale in sales:
         sales_by_date.setdefault(sale.created_at.date(), []).append(sale)
     for day_sales in sales_by_date.values():
@@ -1114,6 +1160,8 @@ def sale_rows(sales):
         items = list(sale.items)
         item_count = len(items)
         for item_index, item in enumerate(items):
+            product = products.get(item.barcode)
+            cost_price = item.cost_price if item.cost_price else (product.cost_price if product else 0)
             rows.append({
                 "sale_id": sale.id,
                 "sale_no": daily_numbers.get(sale.id, sale.id),
@@ -1127,6 +1175,8 @@ def sale_rows(sales):
                 "barcode": item.barcode,
                 "name": item.name,
                 "price": item.price,
+                "cost_price": cost_price,
+                "gross_margin": gross_margin_percent(item.price, cost_price),
                 "qty": item.qty,
                 "subtotal": item.subtotal,
                 "order_total": sale.total,
@@ -1165,6 +1215,8 @@ def sale_export_rows(rows):
         product = products.get(row.get("barcode"))
         export_row["artist"] = product.artist if product else ""
         export_row["product_image"] = product.image if product and product.image else ""
+        export_row["cost_price"] = row.get("cost_price", product.cost_price if product else 0)
+        export_row["gross_margin"] = row.get("gross_margin", gross_margin_percent(row.get("price"), export_row["cost_price"]))
         if row.get("item_index", 0) > 0:
             export_row["order_total"] = ""
             export_row["order_payable"] = ""
@@ -1189,6 +1241,7 @@ def parse_inventory_file(file_storage):
                     "name": str(row.get("name", "")).strip(),
                     "artist": str(row.get("artist", "") or "").strip(),
                     "price": float(row.get("price", 0)),
+                    "cost_price": float(row.get("cost_price", 0) or 0),
                     "stock": int((row.get("store_stock") if row.get("store_stock") not in (None, "") else row.get("stock", 0)) or 0),
                     "warehouse_stock": int(row.get("warehouse_stock", 0) or 0),
                     "image": str(row.get("image", "")).strip() or None,
@@ -1214,6 +1267,7 @@ def parse_inventory_file(file_storage):
                     "name": str(row_data.get("name", "")).strip(),
                     "artist": str(row_data.get("artist", "") or "").strip(),
                     "price": float(row_data.get("price", 0) or 0),
+                    "cost_price": float(row_data.get("cost_price", 0) or 0),
                     "stock": int((row_data.get("store_stock") if row_data.get("store_stock") not in (None, "") else row_data.get("stock", 0)) or 0),
                     "warehouse_stock": int(row_data.get("warehouse_stock", 0) or 0),
                     "image": str(row_data.get("image", "")).strip() or None,
@@ -1310,6 +1364,7 @@ def manage_add():
     name = request.form.get("name", "").strip()
     artist = request.form.get("artist", "").strip()
     price = request.form.get("price", "").strip()
+    cost_price = request.form.get("cost_price", "").strip() or "0"
     stock = request.form.get("stock", "").strip()
     warehouse_stock = request.form.get("warehouse_stock", "").strip() or "0"
     image_file = request.files.get("image")
@@ -1319,12 +1374,13 @@ def manage_add():
         return redirect(url_for("manage"))
     try:
         price = float(price)
+        cost_price = float(cost_price)
         stock = int(stock)
         warehouse_stock = int(warehouse_stock)
     except ValueError:
         flash("价格必须是数字，库存必须是整数", "error")
         return redirect(url_for("manage"))
-    if price < 0 or stock < 0 or warehouse_stock < 0:
+    if price < 0 or cost_price < 0 or stock < 0 or warehouse_stock < 0:
         flash("价格和库存不能为负数", "error")
         return redirect(url_for("manage"))
 
@@ -1345,6 +1401,7 @@ def manage_add():
         "name": name,
         "artist": artist,
         "price": price,
+        "cost_price": cost_price,
         "stock": stock,
         "warehouse_stock": warehouse_stock,
         "image": image_path,
@@ -1405,13 +1462,15 @@ def manage_export(fmt):
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["label_barcode", "name", "artist", "price", "store_stock", "warehouse_stock", "image"])
+        writer.writerow(["label_barcode", "name", "artist", "price", "cost_price", "gross_margin", "store_stock", "warehouse_stock", "image"])
         for product in inventory:
             writer.writerow([
                 product.get("label_barcode", ""),
                 product.get("name", ""),
                 product.get("artist", ""),
                 product.get("price", ""),
+                product.get("cost_price", ""),
+                product.get("gross_margin", ""),
                 product.get("stock", ""),
                 product.get("warehouse_stock", ""),
                 product.get("image", ""),
@@ -1433,6 +1492,8 @@ def manage_export(fmt):
             "name",
             "artist",
             "price",
+            "cost_price",
+            "gross_margin",
             "store_stock",
             "warehouse_stock",
             "product_image",
@@ -1445,6 +1506,8 @@ def manage_export(fmt):
                 product.name,
                 product.artist or "",
                 product.price,
+                product.cost_price or 0,
+                gross_margin_percent(product.price, product.cost_price),
                 product.stock,
                 product.warehouse_stock,
                 "",
@@ -1460,9 +1523,9 @@ def manage_export(fmt):
 
             photo_image = excel_image_from_bytes(product_image_bytes(product), max_width=86, max_height=68)
             if photo_image:
-                sheet.add_image(photo_image, f"H{row_index}")
+                sheet.add_image(photo_image, f"J{row_index}")
             else:
-                sheet.cell(row=row_index, column=8, value=product.image or "")
+                sheet.cell(row=row_index, column=10, value=product.image or "")
 
         sheet.freeze_panes = "A2"
         widths = {
@@ -1472,8 +1535,10 @@ def manage_export(fmt):
             "D": 20,
             "E": 10,
             "F": 10,
-            "G": 12,
-            "H": 16,
+            "G": 10,
+            "H": 12,
+            "I": 12,
+            "J": 16,
         }
         for column, width in widths.items():
             sheet.column_dimensions[column].width = width
@@ -1610,7 +1675,7 @@ def sales_export(fmt):
     daily_summary = daily_sales_summary(sales)
     headers = [
         "sale_no", "sale_id", "created_at", "payment_method", "member_id", "member_name", "discount",
-        "name", "artist", "product_image", "price", "qty", "subtotal", "order_total", "order_payable",
+        "name", "artist", "product_image", "price", "cost_price", "gross_margin", "qty", "subtotal", "order_total", "order_payable",
     ]
     summary_headers = ["date", "orders", "sold_items", "original_total", "paid_amount"]
     filename_date = (
@@ -1837,6 +1902,7 @@ def api_checkout():
             "barcode": product.barcode,
             "name": product.name,
             "price": product.price,
+            "cost_price": product.cost_price or 0,
             "qty": qty,
             "subtotal": subtotal,
             "image": product.image,
@@ -1865,6 +1931,7 @@ def api_checkout():
             barcode=item["barcode"],
             name=item["name"],
             price=item["price"],
+            cost_price=item["cost_price"],
             qty=qty,
             subtotal=item["subtotal"],
         ))
