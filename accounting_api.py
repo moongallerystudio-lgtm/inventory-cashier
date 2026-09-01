@@ -6,19 +6,25 @@ adds ACCOUNTING_API_TOKEN and forwards requests over HTTPS.
 
 import hashlib
 import hmac
+import io
 import json
 import os
 import uuid
+import zipfile
 from datetime import date, datetime
 
 import jwt
 from flask import Blueprint, Response, jsonify, request, send_file
 from flask import g
 from jwt import PyJWKClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import UniqueConstraint
 
 
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+MAX_BACKUP_BYTES = 90 * 1024 * 1024
+MAX_BACKUP_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
+MAX_BACKUP_FILES = 2500
 ACCOUNTING_ROLES = {"admin", "editor", "viewer"}
 DEFAULT_BOOTSTRAP_USERS = {
     "wangyiwei0924@gmail.com": "admin",
@@ -140,6 +146,19 @@ def init_accounting_api(app, db, Sale, app_timezone):
         updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None))
         created_by = db.Column(db.String(320), nullable=False, default="bootstrap")
 
+    class AccountingBackup(db.Model):
+        __tablename__ = "accounting_backups"
+        id = db.Column(db.String(100), primary_key=True)
+        daily_key = db.Column(db.String(20), nullable=True, unique=True)
+        kind = db.Column(db.String(30), nullable=False, default="manual", index=True)
+        file_name = db.Column(db.String(300), nullable=False)
+        size = db.Column(db.Integer, nullable=False)
+        sha256 = db.Column(db.String(64), nullable=False, index=True)
+        summary = db.Column(db.Text, nullable=False, default="{}")
+        content = db.Column(db.LargeBinary, nullable=False)
+        created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None), index=True)
+        created_by = db.Column(db.String(320), nullable=False, default="system")
+
     api = Blueprint("accounting_api", __name__, url_prefix="/api/accounting")
     firebase_jwk_client = PyJWKClient(FIREBASE_JWKS_URL, cache_keys=True, lifespan=3600)
 
@@ -243,11 +262,19 @@ def init_accounting_api(app, db, Sale, app_timezone):
         db.session.add(user)
         db.session.commit()
         g.accounting_user = user
-        admin_only = request.path.endswith("/users") or request.path.endswith("/sales/sync") or request.path.endswith("/audit") or request.path.endswith("/backup")
+        admin_only = any(request.path == path or request.path.startswith(f"{path}/") for path in {
+            "/api/accounting/users", "/api/accounting/sales/sync", "/api/accounting/audit",
+            "/api/accounting/backup", "/api/accounting/backups", "/api/accounting/restore",
+        })
         if admin_only and user.role != "admin":
             return jsonify({"error": "ADMIN_REQUIRED"}), 403
         if user.role == "viewer" and request.method not in {"GET", "HEAD"}:
             return jsonify({"error": "READ_ONLY"}), 403
+        try:
+            ensure_daily_backup()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Automatic accounting backup failed")
         return None
 
     def audit(action, entity_type, entity_id=None, detail=None):
@@ -335,6 +362,205 @@ def init_accounting_api(app, db, Sale, app_timezone):
             "role": row.role, "active": row.active,
             "createdAt": iso(row.created_at), "updatedAt": iso(row.updated_at),
         }
+
+    def audit_dict(row):
+        try:
+            detail = json.loads(row.detail or "{}")
+        except (TypeError, ValueError):
+            detail = {}
+        return {
+            "id": row.id, "action": row.action, "entityType": row.entity_type,
+            "entityId": row.entity_id, "actor": row.actor,
+            "detail": detail, "createdAt": iso(row.created_at),
+        }
+
+    def backup_dict(row):
+        try:
+            summary = json.loads(row.summary or "{}")
+        except (TypeError, ValueError):
+            summary = {}
+        return {
+            "id": row.id, "kind": row.kind, "fileName": row.file_name,
+            "size": row.size, "sha256": row.sha256, "summary": summary,
+            "createdAt": iso(row.created_at), "createdBy": row.created_by,
+        }
+
+    def backup_retention_days():
+        try:
+            return min(max(int(os.environ.get("ACCOUNTING_BACKUP_RETENTION_DAYS", "14")), 7), 90)
+        except ValueError:
+            return 14
+
+    def build_backup_archive():
+        documents = AccountingDocument.query.order_by(AccountingDocument.created_at, AccountingDocument.id).all()
+        if sum(row.size for row in documents) > MAX_BACKUP_UNCOMPRESSED_BYTES:
+            raise ValueError("documents exceed the backup safety limit")
+        settings = {row.key: row.value for row in AccountingSetting.query.order_by(AccountingSetting.key).all()}
+        audit_rows = AccountingAuditLog.query.order_by(AccountingAuditLog.created_at, AccountingAuditLog.id).all()
+        state = state_payload()
+        state["entries"] = [{key: value for key, value in entry.items() if key != "details"} for entry in state["entries"]]
+        summary = {
+            "entries": len(state["entries"]), "employees": len(state["employees"]),
+            "payrollRecords": len(state["payrollRecords"]), "documents": len(documents),
+            "documentBytes": sum(row.size for row in documents), "auditEvents": len(audit_rows),
+        }
+        manifest_documents = []
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            for index, row in enumerate(documents, start=1):
+                archive_path = f"documents/{index:05d}.bin"
+                archive.writestr(archive_path, row.content)
+                manifest_documents.append({**document_dict(row), "archivePath": archive_path, "sha256": row.sha256, "createdBy": row.created_by})
+            manifest = {
+                "format": "shingetsu-ledger-backup", "version": 1,
+                "exportedAt": now().isoformat(), "company": "合同会社新月芸術",
+                "summary": summary, "documents": manifest_documents,
+            }
+            archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            archive.writestr("state.json", json.dumps(state, ensure_ascii=False, indent=2))
+            archive.writestr("settings.json", json.dumps(settings, ensure_ascii=False, indent=2))
+            archive.writestr("users.json", json.dumps([user_dict(row) for row in AccountingUser.query.order_by(AccountingUser.email).all()], ensure_ascii=False, indent=2))
+            archive.writestr("audit.json", json.dumps([audit_dict(row) for row in audit_rows], ensure_ascii=False, indent=2))
+        content = output.getvalue()
+        if len(content) > MAX_BACKUP_BYTES:
+            raise ValueError("backup exceeds the 90 MB limit")
+        return content, summary
+
+    def create_snapshot(kind="manual", daily_key=None, created_by=None):
+        content, summary = build_backup_archive()
+        stamp = now().strftime("%Y%m%d-%H%M%S")
+        row = AccountingBackup(
+            id=f"backup-{uuid.uuid4()}", daily_key=daily_key, kind=kind,
+            file_name=f"shingetsu-ledger-{kind}-{stamp}.zip", size=len(content),
+            sha256=hashlib.sha256(content).hexdigest(), summary=json.dumps(summary, ensure_ascii=False, separators=(",", ":")),
+            content=content, created_by=(created_by or actor())[:320],
+        )
+        db.session.add(row)
+        audit("create", "backup", row.id, {"kind": kind, **summary})
+        db.session.commit()
+        return row
+
+    def ensure_daily_backup():
+        daily_key = now().date().isoformat()
+        if AccountingBackup.query.filter_by(daily_key=daily_key).first():
+            return
+        try:
+            create_snapshot("automatic", daily_key=daily_key, created_by="system")
+        except IntegrityError:
+            db.session.rollback()
+            return
+        keep = backup_retention_days()
+        old_rows = AccountingBackup.query.filter_by(kind="automatic").order_by(AccountingBackup.created_at.desc()).offset(keep).all()
+        if old_rows:
+            for row in old_rows:
+                db.session.delete(row)
+            db.session.commit()
+
+    def read_backup_archive(content):
+        if not content or len(content) > MAX_BACKUP_BYTES:
+            raise ValueError("backup file is empty or too large")
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(content), "r")
+        except zipfile.BadZipFile as error:
+            raise ValueError("backup is not a valid ZIP file") from error
+        names = archive.namelist()
+        if len(names) > MAX_BACKUP_FILES or sum(info.file_size for info in archive.infolist()) > MAX_BACKUP_UNCOMPRESSED_BYTES:
+            archive.close()
+            raise ValueError("backup expands beyond the safety limit")
+        if any(name.startswith("/") or ".." in name.split("/") for name in names):
+            archive.close()
+            raise ValueError("backup contains an unsafe path")
+        try:
+            manifest = json.loads(archive.read("manifest.json"))
+            state = json.loads(archive.read("state.json"))
+            settings = json.loads(archive.read("settings.json")) if "settings.json" in names else {}
+        except (KeyError, json.JSONDecodeError, UnicodeDecodeError) as error:
+            archive.close()
+            raise ValueError("backup metadata is incomplete") from error
+        if manifest.get("format") != "shingetsu-ledger-backup" or manifest.get("version") != 1:
+            archive.close()
+            raise ValueError("backup format is not supported")
+        if not isinstance(state, dict) or not isinstance(settings, dict) or not isinstance(manifest.get("documents", []), list):
+            archive.close()
+            raise ValueError("backup data is invalid")
+        return archive, manifest, state, settings
+
+    def restore_archive(content, source):
+        archive, manifest, state, settings = read_backup_archive(content)
+        document_payloads = []
+        try:
+            for item in manifest.get("documents", []):
+                archive_path = str(item.get("archivePath") or "")
+                if not archive_path.startswith("documents/"):
+                    raise ValueError("document path is invalid")
+                body = archive.read(archive_path)
+                if len(body) > MAX_DOCUMENT_BYTES or len(body) != int(item.get("size") or -1):
+                    raise ValueError("document size does not match the manifest")
+                digest = hashlib.sha256(body).hexdigest()
+                if not hmac.compare_digest(digest, str(item.get("sha256") or "")):
+                    raise ValueError("document checksum does not match the manifest")
+                document_payloads.append((item, body, digest))
+        except (KeyError, TypeError, ValueError) as error:
+            archive.close()
+            if isinstance(error, ValueError):
+                raise
+            raise ValueError("backup document data is invalid") from error
+        finally:
+            archive.close()
+
+        create_snapshot("before_restore", created_by=actor())
+        try:
+            AccountingPayroll.query.delete(synchronize_session=False)
+            AccountingProcedure.query.delete(synchronize_session=False)
+            AccountingDocument.query.delete(synchronize_session=False)
+            AccountingEmployee.query.delete(synchronize_session=False)
+            AccountingEntry.query.delete(synchronize_session=False)
+            AccountingSetting.query.delete(synchronize_session=False)
+            db.session.flush()
+
+            employees = state.get("employees") if isinstance(state.get("employees"), list) else []
+            entries = state.get("entries") if isinstance(state.get("entries"), list) else []
+            payroll = state.get("payrollRecords") if isinstance(state.get("payrollRecords"), list) else []
+            for item in employees:
+                upsert_employee(item)
+            for item in entries:
+                upsert_entry(item)
+            db.session.flush()
+            for item in payroll:
+                upsert_payroll(item)
+            for item_id in {str(value)[:120] for value in state.get("completedProcedures", [])}:
+                db.session.add(AccountingProcedure(item_id=item_id, completed=True, completed_at=now(), updated_at=now()))
+            for key, value in settings.items():
+                if isinstance(key, str) and len(key) <= 120 and isinstance(value, str):
+                    set_setting(key, value)
+            if "profile" not in settings:
+                set_setting("profile", json.dumps(state.get("profile") if isinstance(state.get("profile"), dict) else {}, ensure_ascii=False, separators=(",", ":")))
+            set_setting("initialized", "true")
+            set_setting("updated_at", now().isoformat())
+            for item, body, digest in document_payloads:
+                category = str(item.get("category") or "")[:40]
+                mime_type = str(item.get("mimeType") or "application/octet-stream")[:200]
+                if category not in {"year_end", "schedule"} or mime_type not in ALLOWED_DOCUMENT_TYPES:
+                    raise ValueError("backup contains an unsupported document")
+                db.session.add(AccountingDocument(
+                    id=str(item.get("id") or f"doc-{uuid.uuid4()}")[:100], category=category,
+                    related_id=str(item.get("itemId") or "")[:120] or None,
+                    employee_id=str(item.get("employeeId") or "")[:80] or None,
+                    document_type=str(item.get("documentType") or "")[:200],
+                    file_name=str(item.get("fileName") or "document")[:500], mime_type=mime_type,
+                    size=len(body), sha256=digest, content=body,
+                    created_at=datetime.fromisoformat(str(item.get("createdAt"))) if item.get("createdAt") else now(),
+                    created_by=str(item.get("createdBy") or actor())[:200],
+                ))
+            audit("restore", "backup", source, {
+                "entries": len(entries), "employees": len(employees), "payroll": len(payroll),
+                "documents": len(document_payloads),
+            })
+            db.session.commit()
+            return state_payload()
+        except Exception:
+            db.session.rollback()
+            raise
 
     def upsert_entry(data):
         row_id = str(data.get("id") or f"e-{uuid.uuid4()}")[:80]
@@ -646,31 +872,82 @@ def init_accounting_api(app, db, Sale, app_timezone):
     @api.get("/audit")
     def audit_log():
         limit = min(max(int(request.args.get("limit", 100)), 1), 500)
-        rows = AccountingAuditLog.query.order_by(AccountingAuditLog.created_at.desc()).limit(limit).all()
-        return jsonify({"events": [{
-            "id": row.id, "action": row.action, "entityType": row.entity_type,
-            "entityId": row.entity_id, "actor": row.actor,
-            "detail": json.loads(row.detail or "{}"), "createdAt": iso(row.created_at),
-        } for row in rows]})
+        query = AccountingAuditLog.query
+        if request.args.get("action"):
+            query = query.filter_by(action=str(request.args["action"])[:80])
+        if request.args.get("entityType"):
+            query = query.filter_by(entity_type=str(request.args["entityType"])[:80])
+        if request.args.get("actor"):
+            query = query.filter(AccountingAuditLog.actor.ilike(f"%{str(request.args['actor'])[:120]}%"))
+        rows = query.order_by(AccountingAuditLog.created_at.desc()).limit(limit).all()
+        return jsonify({"events": [audit_dict(row) for row in rows]})
 
     @api.get("/backup")
     def backup():
-        payload = state_payload()
-        payload["documents"] = [document_dict(row) for row in AccountingDocument.query.order_by(AccountingDocument.created_at).all()]
-        payload["exportedAt"] = now().isoformat()
-        audit("export", "backup", detail={"documents": len(payload["documents"])})
+        content, summary = build_backup_archive()
+        audit("export", "backup", detail=summary)
         db.session.commit()
-        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-        return Response(body, mimetype="application/json", headers={
-            "Content-Disposition": f'attachment; filename="shingetsu-backup-{now().date().isoformat()}.json"'
-        })
+        return send_file(
+            io.BytesIO(content), mimetype="application/zip", as_attachment=True,
+            download_name=f"shingetsu-ledger-full-{now().strftime('%Y%m%d-%H%M%S')}.zip", max_age=0,
+        )
+
+    @api.get("/backups")
+    def list_backups():
+        rows = AccountingBackup.query.order_by(AccountingBackup.created_at.desc()).limit(100).all()
+        return jsonify({"backups": [backup_dict(row) for row in rows], "retentionDays": backup_retention_days()})
+
+    @api.post("/backups")
+    def make_backup():
+        try:
+            row = create_snapshot("manual")
+            return jsonify(backup_dict(row)), 201
+        except ValueError as error:
+            db.session.rollback()
+            return jsonify({"error": "BACKUP_FAILED", "message": str(error)}), 400
+
+    @api.get("/backups/<backup_id>")
+    def download_saved_backup(backup_id):
+        row = db.session.get(AccountingBackup, backup_id)
+        if not row:
+            return jsonify({"error": "NOT_FOUND"}), 404
+        audit("download", "backup", row.id, {"kind": row.kind, "size": row.size})
+        db.session.commit()
+        return send_file(io.BytesIO(row.content), mimetype="application/zip", as_attachment=True, download_name=row.file_name, max_age=0)
+
+    @api.post("/backups/<backup_id>/restore")
+    def restore_saved_backup(backup_id):
+        row = db.session.get(AccountingBackup, backup_id)
+        if not row:
+            return jsonify({"error": "NOT_FOUND"}), 404
+        try:
+            state = restore_archive(bytes(row.content), backup_id)
+            return jsonify({"restored": True, "state": state})
+        except (ValueError, TypeError) as error:
+            db.session.rollback()
+            return jsonify({"error": "RESTORE_FAILED", "message": str(error)}), 400
+
+    @api.post("/restore")
+    def restore_uploaded_backup():
+        upload = request.files.get("file")
+        if not upload or not upload.filename:
+            return jsonify({"error": "FILE_REQUIRED"}), 400
+        content = upload.read(MAX_BACKUP_BYTES + 1)
+        if len(content) > MAX_BACKUP_BYTES:
+            return jsonify({"error": "FILE_TOO_LARGE"}), 413
+        try:
+            state = restore_archive(content, upload.filename[:120])
+            return jsonify({"restored": True, "state": state})
+        except (ValueError, TypeError) as error:
+            db.session.rollback()
+            return jsonify({"error": "RESTORE_FAILED", "message": str(error)}), 400
 
     app.register_blueprint(api)
     app.extensions["accounting_models"] = {
         "entry": AccountingEntry, "employee": AccountingEmployee,
         "payroll": AccountingPayroll, "procedure": AccountingProcedure,
         "document": AccountingDocument, "setting": AccountingSetting,
-        "audit": AccountingAuditLog, "user": AccountingUser,
+        "audit": AccountingAuditLog, "user": AccountingUser, "backup": AccountingBackup,
     }
     app.extensions["accounting_firebase_jwk_client"] = firebase_jwk_client
     return app.extensions["accounting_models"]

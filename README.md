@@ -28,13 +28,16 @@ Inventory and cashier management system.
   - 如果未设置，项目默认使用本地 SQLite 文件 `data.db`。
 - `ACCOUNTING_API_TOKEN`：新月会计系统服务器调用专用 API 的共享密钥。请使用随机长字符串，并在会计网站服务器端设置相同的值；不要写入前端 JavaScript。
 - `FIREBASE_PROJECT_ID`：Firebase 项目 ID，必须与会计网站的 Google 登录项目一致。会计 API 会独立验证 Firebase ID Token，并根据数据库白名单执行管理员、录入和只读权限。
+- `ACCOUNTING_BACKUP_RETENTION_DAYS`：可选，会计系统每日自动恢复点的保留天数，默认 14，可设为 7–90。
 
 ### 会计系统共用数据库
 
 本服务同时提供受 Bearer Token 保护的 `/api/accounting/*` 接口。会计系统的仕訳、员工、工资、年度手续、资料附件和操作记录使用独立的 `accounting_*` 表，不会修改库存、商品或收银销售表。Mooon Shop 销售由现有 `sales` 表同步为只读仕訳。
 
 - 附件当前保存到 PostgreSQL，单个文件上限 10 MB。
-- `GET /api/accounting/backup` 可导出会计状态和附件目录 JSON。
+- `GET /api/accounting/backup` 可导出包含所有附件原文件和 SHA-256 校验值的 ZIP 完整备份。
+- 系统每日第一次已认证访问会自动创建快照；恢复前也会自动保存当前状态。
+- 应用内恢复点保存于同一 PostgreSQL，用于快速回滚；仍应同时使用 Render PostgreSQL 备份，并定期将 ZIP 完整备份保存到数据库以外的位置。
 - Render 的数据库备份策略由当前付费 PostgreSQL 套餐管理；上线后应在 Render 控制台确认备份保留期。
 
 ### 3. 本地 Docker 运行
