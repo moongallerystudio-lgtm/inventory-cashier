@@ -166,8 +166,8 @@ def init_accounting_api(app, db, Sale, app_timezone):
             detail=json.dumps(safe_detail, ensure_ascii=False, separators=(",", ":")),
         ))
 
-    def entry_dict(row):
-        return {
+    def entry_dict(row, shop_sales=None):
+        payload = {
             "id": row.id, "date": iso(row.entry_date), "description": row.description,
             "source": row.source, "debit": row.debit_account, "credit": row.credit_account,
             "amount": row.amount, "status": row.status, "payment": row.payment,
@@ -175,6 +175,39 @@ def init_accounting_api(app, db, Sale, app_timezone):
             "importFileName": row.import_file_name, "importedAt": iso(row.imported_at),
             "version": row.version,
         }
+        if row.source == "shop-db" and shop_sales:
+            payload["details"] = shop_sales.get(iso(row.entry_date), {}).get("details", [])
+        return payload
+
+    def shop_sales_by_day():
+        groups = {}
+        for sale in Sale.query.order_by(Sale.created_at, Sale.id).all():
+            day = sale.created_at.date().isoformat()
+            group = groups.setdefault(day, {
+                "amount": 0, "salesCount": 0, "itemCount": 0,
+                "paymentMethods": set(), "details": [],
+            })
+            payable = integer(round(sale.payable or 0))
+            group["amount"] += payable
+            group["salesCount"] += 1
+            if sale.payment_method:
+                group["paymentMethods"].add(sale.payment_method)
+
+            items = list(sale.items)
+            sale_total = float(sale.total or sum(float(item.subtotal or 0) for item in items))
+            allocated = [integer(round(float(item.subtotal or 0) * payable / sale_total)) if sale_total else 0 for item in items]
+            if allocated:
+                allocated[-1] += payable - sum(allocated)
+            for item, recognized_amount in zip(items, allocated):
+                quantity = integer(item.qty)
+                group["itemCount"] += quantity
+                group["details"].append({
+                    "id": f"shop-item-{item.id}", "saleId": sale.id,
+                    "soldAt": iso(sale.created_at), "name": item.name,
+                    "quantity": quantity, "unitPrice": integer(round(item.price or 0)),
+                    "amount": recognized_amount, "payment": sale.payment_method or "未记录",
+                })
+        return groups
 
     def employee_dict(row):
         return {
@@ -270,9 +303,10 @@ def init_accounting_api(app, db, Sale, app_timezone):
 
     def state_payload():
         settings = {row.key: row.value for row in AccountingSetting.query.all()}
+        shop_sales = shop_sales_by_day()
         return {
             "initialized": settings.get("initialized") == "true",
-            "entries": [entry_dict(row) for row in AccountingEntry.query.order_by(AccountingEntry.entry_date).all()],
+            "entries": [entry_dict(row, shop_sales) for row in AccountingEntry.query.order_by(AccountingEntry.entry_date).all()],
             "employees": [employee_dict(row) for row in AccountingEmployee.query.order_by(AccountingEmployee.created_at).all()],
             "payrollRecords": [payroll_dict(row) for row in AccountingPayroll.query.order_by(AccountingPayroll.month).all()],
             "completedProcedures": [row.item_id for row in AccountingProcedure.query.filter_by(completed=True).all()],
@@ -342,30 +376,61 @@ def init_accounting_api(app, db, Sale, app_timezone):
 
     @api.post("/sales/sync")
     def sync_sales():
-        created = 0
-        for sale in Sale.query.order_by(Sale.id).all():
-            import_key = f"mooon-shop-sale:{sale.id}"
-            if AccountingEntry.query.filter_by(import_key=import_key).first():
-                continue
-            payment = sale.payment_method or "未记录"
-            debit = "現金" if payment in {"现金", "現金"} else "普通預金" if payment in {"银行转账", "銀行振込"} else "未収入金"
-            names = "、".join(item.name for item in sale.items[:3])
-            if len(sale.items) > 3:
-                names += f" 等{len(sale.items)}点"
-            row = AccountingEntry(
-                id=f"shop-sale-{sale.id}", entry_date=sale.created_at.date(),
-                description=names or f"Mooon Shop 売上 #{sale.id}", source="shop-db",
-                debit_account=debit, credit_account="売上高", amount=integer(sale.payable),
-                status="done", payment=payment, import_key=import_key,
-                import_batch_id=f"shop-db-{sale.created_at.date().isoformat()}",
-                import_file_name="Mooon Shop PostgreSQL", imported_at=now(), created_by="sales-sync",
-            )
+        grouped = shop_sales_by_day()
+        expected_keys = {f"mooon-shop-day:{day}" for day in grouped}
+        created = updated = removed_legacy = removed_duplicates = 0
+
+        for row in AccountingEntry.query.filter_by(source="shop-db").all():
+            if row.import_key not in expected_keys:
+                db.session.delete(row)
+                removed_legacy += 1
+
+        for day, sales in grouped.items():
+            import_key = f"mooon-shop-day:{day}"
+            row = AccountingEntry.query.filter_by(import_key=import_key).first()
+            if row:
+                updated += 1
+            else:
+                row = AccountingEntry(id=f"shop-day-{day}", import_key=import_key, created_by="sales-sync")
+                created += 1
+            payments = sales["paymentMethods"]
+            payment = next(iter(payments)) if len(payments) == 1 else "複数決済"
+            debit = "現金" if payments and payments <= {"现金", "現金"} else "普通預金" if payments and payments <= {"银行转账", "銀行振込"} else "未収入金"
+            row.entry_date = date.fromisoformat(day)
+            row.description = f"Mooon Shop 日次売上（{sales['salesCount']}会計・{sales['itemCount']}点）"
+            row.source = "shop-db"
+            row.debit_account = debit
+            row.credit_account = "売上高"
+            row.amount = sales["amount"]
+            row.status = "done"
+            row.payment = payment
+            row.import_batch_id = "shop-db"
+            row.import_file_name = "Mooon Shop PostgreSQL"
+            row.imported_at = now()
+            row.updated_at = now()
+            row.version = (row.version or 0) + 1
             db.session.add(row)
-            created += 1
+
+        sale_dates = set(grouped)
+        imported_shop_entries = AccountingEntry.query.filter(
+            AccountingEntry.source == "shop",
+            AccountingEntry.credit_account == "売上高",
+            AccountingEntry.import_key.isnot(None),
+        ).all()
+        for row in imported_shop_entries:
+            if iso(row.entry_date) in sale_dates:
+                db.session.delete(row)
+                removed_duplicates += 1
         set_setting("updated_at", now().isoformat())
-        audit("sync", "shop_sales", detail={"created": created})
+        audit("sync", "shop_sales", detail={
+            "created": created, "updated": updated, "removedLegacy": removed_legacy,
+            "removedDuplicates": removed_duplicates, "days": len(grouped),
+        })
         db.session.commit()
-        return jsonify({"created": created, "state": state_payload()})
+        return jsonify({
+            "created": created, "updated": updated, "removedLegacy": removed_legacy,
+            "removedDuplicates": removed_duplicates, "state": state_payload(),
+        })
 
     @api.get("/documents")
     def list_documents():
