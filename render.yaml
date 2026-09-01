@@ -12,6 +12,8 @@ services:
         fromDatabase:
           name: inventory-cashier-db
           property: connectionString
+      - key: ACCOUNTING_API_TOKEN
+        sync: false
 
 databases:
   - name: inventory-cashier-db

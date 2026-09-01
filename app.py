@@ -486,6 +486,12 @@ class CustomerDisplayState(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
 
 
+# Register the private accounting tables and API before db.create_all() runs.
+# The API is protected by ACCOUNTING_API_TOKEN and is intended for server-to-server use.
+from accounting_api import init_accounting_api
+init_accounting_api(app, db, Sale, APP_TIMEZONE)
+
+
 def ensure_directories():
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
