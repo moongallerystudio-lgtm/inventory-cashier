@@ -11,11 +11,20 @@ import os
 import uuid
 from datetime import date, datetime
 
+import jwt
 from flask import Blueprint, Response, jsonify, request, send_file
+from flask import g
+from jwt import PyJWKClient
 from sqlalchemy import UniqueConstraint
 
 
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+ACCOUNTING_ROLES = {"admin", "editor", "viewer"}
+DEFAULT_BOOTSTRAP_USERS = {
+    "wangyiwei0924@gmail.com": "admin",
+    "moon.gallery.studio@gmail.com": "editor",
+}
+FIREBASE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
 ALLOWED_DOCUMENT_TYPES = {
     "application/pdf",
     "image/jpeg",
@@ -120,7 +129,19 @@ def init_accounting_api(app, db, Sale, app_timezone):
         detail = db.Column(db.Text, nullable=False, default="{}")
         created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None), index=True)
 
+    class AccountingUser(db.Model):
+        __tablename__ = "accounting_users"
+        email = db.Column(db.String(320), primary_key=True)
+        firebase_uid = db.Column(db.String(128), nullable=True, unique=True)
+        display_name = db.Column(db.String(250), nullable=False, default="")
+        role = db.Column(db.String(20), nullable=False, default="viewer", index=True)
+        active = db.Column(db.Boolean, nullable=False, default=True)
+        created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None))
+        updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None))
+        created_by = db.Column(db.String(320), nullable=False, default="bootstrap")
+
     api = Blueprint("accounting_api", __name__, url_prefix="/api/accounting")
+    firebase_jwk_client = PyJWKClient(FIREBASE_JWKS_URL, cache_keys=True, lifespan=3600)
 
     def now():
         return datetime.now(app_timezone).replace(tzinfo=None)
@@ -142,7 +163,8 @@ def init_accounting_api(app, db, Sale, app_timezone):
         return number
 
     def actor():
-        return (request.headers.get("X-Accounting-Actor") or "owner")[:200]
+        identity = getattr(g, "firebase_identity", None) or {}
+        return (identity.get("email") or request.headers.get("X-Accounting-Actor") or "system")[:200]
 
     def authorized():
         expected = os.environ.get("ACCOUNTING_API_TOKEN", "")
@@ -151,10 +173,82 @@ def init_accounting_api(app, db, Sale, app_timezone):
             return False
         return hmac.compare_digest(supplied[7:], expected)
 
+    def verified_firebase_identity():
+        project_id = os.environ.get("FIREBASE_PROJECT_ID", "").strip()
+        supplied = request.headers.get("X-Firebase-Authorization", "")
+        if not project_id or not supplied.startswith("Bearer "):
+            return None
+        token = supplied[7:]
+        try:
+            signing_key = firebase_jwk_client.get_signing_key_from_jwt(token)
+            claims = jwt.decode(
+                token, signing_key.key, algorithms=["RS256"], audience=project_id,
+                issuer=f"https://securetoken.google.com/{project_id}", leeway=30,
+                options={"require": ["exp", "iat", "sub"]},
+            )
+        except (jwt.PyJWTError, jwt.exceptions.PyJWKClientError, ValueError):
+            return None
+        email = str(claims.get("email") or "").strip().lower()
+        uid = str(claims.get("sub") or "").strip()
+        auth_time = claims.get("auth_time", claims.get("iat"))
+        if not isinstance(auth_time, (int, float)) or auth_time > datetime.now().timestamp() + 30:
+            return None
+        if not email or not uid or len(uid) > 128 or claims.get("email_verified") is not True:
+            return None
+        return {"email": email[:320], "uid": uid, "name": str(claims.get("name") or "")[:250]}
+
+    def bootstrap_user_roles():
+        configured = os.environ.get("ACCOUNTING_BOOTSTRAP_USERS", "").strip()
+        if not configured:
+            return DEFAULT_BOOTSTRAP_USERS
+        roles = {}
+        for item in configured.split(","):
+            email, separator, role = item.strip().partition(":")
+            normalized = email.strip().lower()
+            selected_role = role.strip().lower() if separator else "viewer"
+            if normalized and selected_role in ACCOUNTING_ROLES:
+                roles[normalized] = selected_role
+        return roles
+
+    def ensure_bootstrap_users():
+        changed = False
+        for email, role in bootstrap_user_roles().items():
+            if not db.session.get(AccountingUser, email):
+                db.session.add(AccountingUser(email=email, role=role, active=True, created_by="bootstrap"))
+                changed = True
+        if changed:
+            db.session.commit()
+
     @api.before_request
-    def require_token():
+    def require_access():
         if not authorized():
             return jsonify({"error": "UNAUTHORIZED"}), 401
+        if request.path.endswith("/health"):
+            return None
+        identity = verified_firebase_identity()
+        if not identity:
+            return jsonify({"error": "INVALID_FIREBASE_TOKEN"}), 401
+        g.firebase_identity = identity
+        ensure_bootstrap_users()
+        user = db.session.get(AccountingUser, identity["email"])
+        if not user or not user.active:
+            return jsonify({"error": "ACCOUNT_NOT_ALLOWED"}), 403
+        if user.firebase_uid and not hmac.compare_digest(user.firebase_uid, identity["uid"]):
+            return jsonify({"error": "IDENTITY_MISMATCH"}), 403
+        if not user.firebase_uid:
+            user.firebase_uid = identity["uid"]
+        if identity["name"] and identity["name"] != user.display_name:
+            user.display_name = identity["name"]
+        user.updated_at = now()
+        db.session.add(user)
+        db.session.commit()
+        g.accounting_user = user
+        admin_only = request.path.endswith("/users") or request.path.endswith("/sales/sync") or request.path.endswith("/audit") or request.path.endswith("/backup")
+        if admin_only and user.role != "admin":
+            return jsonify({"error": "ADMIN_REQUIRED"}), 403
+        if user.role == "viewer" and request.method not in {"GET", "HEAD"}:
+            return jsonify({"error": "READ_ONLY"}), 403
+        return None
 
     def audit(action, entity_type, entity_id=None, detail=None):
         safe_detail = detail if isinstance(detail, dict) else {}
@@ -233,6 +327,13 @@ def init_accounting_api(app, db, Sale, app_timezone):
             "employeeId": row.employee_id, "documentType": row.document_type,
             "fileName": row.file_name, "mimeType": row.mime_type, "size": row.size,
             "createdAt": iso(row.created_at),
+        }
+
+    def user_dict(row):
+        return {
+            "email": row.email, "displayName": row.display_name,
+            "role": row.role, "active": row.active,
+            "createdAt": iso(row.created_at), "updatedAt": iso(row.updated_at),
         }
 
     def upsert_entry(data):
@@ -323,6 +424,56 @@ def init_accounting_api(app, db, Sale, app_timezone):
     @api.get("/health")
     def health():
         return jsonify({"ok": True, "database": db.engine.dialect.name, "service": "mooon-accounting"})
+
+    @api.get("/auth/session")
+    def auth_session():
+        return jsonify(user_dict(g.accounting_user))
+
+    @api.get("/users")
+    def list_users():
+        rows = AccountingUser.query.order_by(AccountingUser.role, AccountingUser.email).all()
+        return jsonify({"users": [user_dict(row) for row in rows]})
+
+    @api.put("/users")
+    def put_user():
+        data = request.get_json(silent=True) or {}
+        email = str(data.get("email") or "").strip().lower()[:320]
+        role = str(data.get("role") or "viewer").strip().lower()
+        if not email or "@" not in email or role not in ACCOUNTING_ROLES:
+            return jsonify({"error": "INVALID_USER"}), 400
+        row = db.session.get(AccountingUser, email)
+        active = data.get("active", True)
+        if not isinstance(active, bool):
+            return jsonify({"error": "INVALID_USER"}), 400
+        if row and row.role == "admin" and row.active and (role != "admin" or not active):
+            other_admins = AccountingUser.query.filter(AccountingUser.role == "admin", AccountingUser.active.is_(True), AccountingUser.email != email).count()
+            if not other_admins:
+                return jsonify({"error": "LAST_ADMIN"}), 409
+        created = row is None
+        row = row or AccountingUser(email=email, created_by=actor())
+        row.display_name = str(data.get("displayName") or row.display_name or "")[:250]
+        row.role = role
+        row.active = active
+        row.updated_at = now()
+        db.session.add(row)
+        audit("create" if created else "update", "user", email, {"role": role, "active": row.active})
+        db.session.commit()
+        return jsonify(user_dict(row)), 201 if created else 200
+
+    @api.delete("/users")
+    def delete_user():
+        email = str(request.args.get("email") or "").strip().lower()[:320]
+        row = db.session.get(AccountingUser, email) if email else None
+        if not row:
+            return jsonify({"error": "NOT_FOUND"}), 404
+        if row.role == "admin" and row.active:
+            other_admins = AccountingUser.query.filter(AccountingUser.role == "admin", AccountingUser.active.is_(True), AccountingUser.email != email).count()
+            if not other_admins:
+                return jsonify({"error": "LAST_ADMIN"}), 409
+        db.session.delete(row)
+        audit("delete", "user", email, {"role": row.role})
+        db.session.commit()
+        return Response(status=204)
 
     @api.get("/state")
     def get_state():
@@ -519,6 +670,7 @@ def init_accounting_api(app, db, Sale, app_timezone):
         "entry": AccountingEntry, "employee": AccountingEmployee,
         "payroll": AccountingPayroll, "procedure": AccountingProcedure,
         "document": AccountingDocument, "setting": AccountingSetting,
-        "audit": AccountingAuditLog,
+        "audit": AccountingAuditLog, "user": AccountingUser,
     }
+    app.extensions["accounting_firebase_jwk_client"] = firebase_jwk_client
     return app.extensions["accounting_models"]

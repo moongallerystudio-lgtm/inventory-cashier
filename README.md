@@ -27,6 +27,7 @@ Inventory and cashier management system.
   - 例如：`postgresql://user:password@host:port/dbname`
   - 如果未设置，项目默认使用本地 SQLite 文件 `data.db`。
 - `ACCOUNTING_API_TOKEN`：新月会计系统服务器调用专用 API 的共享密钥。请使用随机长字符串，并在会计网站服务器端设置相同的值；不要写入前端 JavaScript。
+- `FIREBASE_PROJECT_ID`：Firebase 项目 ID，必须与会计网站的 Google 登录项目一致。会计 API 会独立验证 Firebase ID Token，并根据数据库白名单执行管理员、录入和只读权限。
 
 ### 会计系统共用数据库
 
@@ -63,6 +64,8 @@ docker run -p 5000:5000 inventory-cashier
 4. 在 Render Web Service 设置中添加环境变量：
    - `SECRET_KEY`，值请改成生产用随机字符串
    - `DATABASE_URL`，选择从 `inventory-cashier-db` 自动注入
+   - `ACCOUNTING_API_TOKEN`，与会计网站服务器端相同
+   - `FIREBASE_PROJECT_ID`，与 Firebase Authentication 项目一致
 5. 部署后访问 Render 提供的 HTTPS 域名即可。
 
 > 如果你已经添加 `render.yaml`，Render 也会自动识别该配置并按定义创建服务。
@@ -86,6 +89,8 @@ git push -u origin main
 5. 在 Render 服务设置中添加环境变量：
    - `SECRET_KEY`
    - `DATABASE_URL`（从 PostgreSQL 数据库自动注入或手动填写）
+   - `ACCOUNTING_API_TOKEN`
+   - `FIREBASE_PROJECT_ID`
 
 ## Render CLI 使用说明
 

@@ -14,6 +14,8 @@ services:
           property: connectionString
       - key: ACCOUNTING_API_TOKEN
         sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
 
 databases:
   - name: inventory-cashier-db
