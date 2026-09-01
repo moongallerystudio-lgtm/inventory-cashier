@@ -39,6 +39,8 @@ Inventory and cashier management system.
 - 系统每日第一次已认证访问会自动创建快照；恢复前也会自动保存当前状态。
 - 应用内恢复点保存于同一 PostgreSQL，用于快速回滚；仍应同时使用 Render PostgreSQL 备份，并定期将 ZIP 完整备份保存到数据库以外的位置。
 - Render 的数据库备份策略由当前付费 PostgreSQL 套餐管理；上线后应在 Render 控制台确认备份保留期。
+- 会计 API 会检查借贷同科目、非正数金额、工资扣款超额、同员工同月重复工资，并提供集中检查结果。
+- 管理员可设置结账日期；已结账期间不能通过整包同步或 Mooon Shop 销售同步修改，解除结账会记录到操作日志。
 
 ### 3. 本地 Docker 运行
 

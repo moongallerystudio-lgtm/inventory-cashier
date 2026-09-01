@@ -181,6 +181,83 @@ def init_accounting_api(app, db, Sale, app_timezone):
             raise ValueError("amounts cannot be negative")
         return number
 
+    def locked_through():
+        row = db.session.get(AccountingSetting, "locked_through")
+        if not row or not row.value:
+            return None
+        try:
+            return date.fromisoformat(row.value[:10])
+        except ValueError:
+            return None
+
+    def entry_values(row):
+        return (
+            iso(row.entry_date), row.description, row.source, row.debit_account,
+            row.credit_account, row.amount, row.status, row.payment,
+            row.import_key, row.import_batch_id, row.import_file_name,
+        )
+
+    def incoming_entry_values(data):
+        return (
+            iso(parse_date(data.get("date"), True)),
+            str(data.get("description") or "").strip()[:500],
+            str(data.get("source") or "manual")[:80],
+            str(data.get("debit") or "").strip()[:120],
+            str(data.get("credit") or "").strip()[:120],
+            integer(data.get("amount")),
+            str(data.get("status") or "review")[:32],
+            str(data.get("payment") or "")[:120],
+            str(data.get("importKey"))[:500] if data.get("importKey") else None,
+            str(data.get("importBatchId"))[:120] if data.get("importBatchId") else None,
+            str(data.get("importFileName"))[:500] if data.get("importFileName") else None,
+        )
+
+    def validate_entry_data(data):
+        entry_date = parse_date(data.get("date"), True)
+        description = str(data.get("description") or "").strip()
+        debit = str(data.get("debit") or "").strip()
+        credit = str(data.get("credit") or "").strip()
+        amount = integer(data.get("amount"))
+        if not description or not debit or not credit or amount <= 0:
+            raise ValueError("entry fields are incomplete")
+        if debit == credit:
+            raise ValueError("debit and credit accounts must be different")
+        lock_date = locked_through()
+        if lock_date and entry_date <= lock_date:
+            existing = db.session.get(AccountingEntry, str(data.get("id") or "")[:80])
+            if not existing or incoming_entry_values(data) != entry_values(existing):
+                raise PermissionError(f"period is closed through {lock_date.isoformat()}")
+
+    def validate_payroll_data(data):
+        gross = integer(data.get("gross"))
+        deductions = sum(integer(data.get(key)) for key in (
+            "socialInsurance", "incomeTax", "residentTax", "otherDeductions",
+        ))
+        if deductions > gross:
+            raise ValueError("payroll deductions cannot exceed gross pay")
+        row_id = str(data.get("id") or "")[:80]
+        employee_id = str(data.get("employeeId") or "")[:80]
+        month = str(data.get("month") or "")[:7]
+        duplicate = AccountingPayroll.query.filter_by(employee_id=employee_id, month=month).first()
+        if duplicate and duplicate.id != row_id:
+            raise ValueError("payroll already exists for this employee and month")
+        pay_date = parse_date(data.get("payDate"), True)
+        lock_date = locked_through()
+        if lock_date and pay_date <= lock_date:
+            existing = db.session.get(AccountingPayroll, str(data.get("id") or "")[:80])
+            unchanged = existing and all((
+                existing.employee_id == str(data.get("employeeId") or "")[:80],
+                existing.month == str(data.get("month") or "")[:7],
+                existing.pay_date == pay_date,
+                existing.gross == gross,
+                existing.social_insurance == integer(data.get("socialInsurance")),
+                existing.income_tax == integer(data.get("incomeTax")),
+                existing.resident_tax == integer(data.get("residentTax")),
+                existing.other_deductions == integer(data.get("otherDeductions")),
+            ))
+            if not unchanged:
+                raise PermissionError(f"period is closed through {lock_date.isoformat()}")
+
     def actor():
         identity = getattr(g, "firebase_identity", None) or {}
         return (identity.get("email") or request.headers.get("X-Accounting-Actor") or "system")[:200]
@@ -563,6 +640,7 @@ def init_accounting_api(app, db, Sale, app_timezone):
             raise
 
     def upsert_entry(data):
+        validate_entry_data(data)
         row_id = str(data.get("id") or f"e-{uuid.uuid4()}")[:80]
         row = db.session.get(AccountingEntry, row_id)
         if row and row.source == "shop-db":
@@ -582,8 +660,6 @@ def init_accounting_api(app, db, Sale, app_timezone):
         row.imported_at = datetime.fromisoformat(str(data.get("importedAt")).replace("Z", "+00:00")).replace(tzinfo=None) if data.get("importedAt") else None
         row.updated_at = now()
         row.version = (row.version or 0) + 1
-        if not row.description or not row.debit_account or not row.credit_account or row.amount <= 0:
-            raise ValueError("entry fields are incomplete")
         db.session.add(row)
         return row
 
@@ -606,6 +682,7 @@ def init_accounting_api(app, db, Sale, app_timezone):
         return row
 
     def upsert_payroll(data):
+        validate_payroll_data(data)
         row_id = str(data.get("id") or f"w-{uuid.uuid4()}")[:80]
         employee_id = str(data.get("employeeId") or "")[:80]
         if not db.session.get(AccountingEmployee, employee_id):
@@ -638,7 +715,43 @@ def init_accounting_api(app, db, Sale, app_timezone):
             "payrollRecords": [payroll_dict(row) for row in AccountingPayroll.query.order_by(AccountingPayroll.month).all()],
             "completedProcedures": [row.item_id for row in AccountingProcedure.query.filter_by(completed=True).all()],
             "profile": json.loads(settings.get("profile", "{}")),
+            "controls": {"lockedThrough": settings.get("locked_through") or None},
             "updatedAt": settings.get("updated_at"),
+        }
+
+    def correctness_payload():
+        issues = []
+        entries = AccountingEntry.query.order_by(AccountingEntry.entry_date, AccountingEntry.id).all()
+        fingerprints = {}
+        for row in entries:
+            if row.debit_account == row.credit_account:
+                issues.append({"severity": "error", "code": "SAME_ACCOUNT", "entityType": "entry", "entityIds": [row.id], "date": iso(row.entry_date), "label": row.description})
+            if row.amount <= 0:
+                issues.append({"severity": "error", "code": "INVALID_AMOUNT", "entityType": "entry", "entityIds": [row.id], "date": iso(row.entry_date), "label": row.description})
+            if row.status == "review":
+                issues.append({"severity": "warning", "code": "REVIEW_REQUIRED", "entityType": "entry", "entityIds": [row.id], "date": iso(row.entry_date), "label": row.description})
+            if row.source != "shop-db" and not row.import_key:
+                fingerprint = (row.entry_date, " ".join(row.description.lower().split()), row.debit_account, row.credit_account, row.amount)
+                fingerprints.setdefault(fingerprint, []).append(row)
+        for rows in fingerprints.values():
+            if len(rows) > 1:
+                issues.append({"severity": "warning", "code": "POSSIBLE_DUPLICATE", "entityType": "entry", "entityIds": [row.id for row in rows], "date": iso(rows[0].entry_date), "label": rows[0].description})
+
+        payroll_groups = {}
+        payroll_rows = AccountingPayroll.query.order_by(AccountingPayroll.month, AccountingPayroll.id).all()
+        for row in payroll_rows:
+            deductions = row.social_insurance + row.income_tax + row.resident_tax + row.other_deductions
+            if deductions > row.gross:
+                issues.append({"severity": "error", "code": "DEDUCTIONS_EXCEED_GROSS", "entityType": "payroll", "entityIds": [row.id], "date": iso(row.pay_date), "label": row.month})
+            payroll_groups.setdefault((row.employee_id, row.month), []).append(row)
+        for rows in payroll_groups.values():
+            if len(rows) > 1:
+                issues.append({"severity": "error", "code": "DUPLICATE_PAYROLL_MONTH", "entityType": "payroll", "entityIds": [row.id for row in rows], "date": iso(rows[0].pay_date), "label": rows[0].month})
+        errors = sum(issue["severity"] == "error" for issue in issues)
+        return {
+            "checkedAt": now().isoformat(), "lockedThrough": iso(locked_through()),
+            "summary": {"errors": errors, "warnings": len(issues) - errors, "entries": len(entries), "payroll": len(payroll_rows)},
+            "issues": issues,
         }
 
     def set_setting(key, value):
@@ -705,6 +818,37 @@ def init_accounting_api(app, db, Sale, app_timezone):
     def get_state():
         return jsonify(state_payload())
 
+    @api.get("/checks")
+    def get_correctness_checks():
+        return jsonify(correctness_payload())
+
+    @api.get("/controls")
+    def get_accounting_controls():
+        return jsonify({"lockedThrough": iso(locked_through())})
+
+    @api.put("/controls")
+    def put_accounting_controls():
+        if g.accounting_user.role != "admin":
+            return jsonify({"error": "ADMIN_REQUIRED"}), 403
+        data = request.get_json(silent=True) or {}
+        value = data.get("lockedThrough")
+        try:
+            lock_date = parse_date(value) if value else None
+        except ValueError:
+            return jsonify({"error": "INVALID_LOCK_DATE"}), 400
+        previous = locked_through()
+        if previous and (lock_date is None or lock_date < previous) and data.get("confirmation") != "REOPEN":
+            return jsonify({"error": "REOPEN_CONFIRMATION_REQUIRED"}), 409
+        if lock_date and (not previous or lock_date > previous):
+            unresolved = [issue for issue in correctness_payload()["issues"] if issue.get("date") and issue["date"] <= iso(lock_date)]
+            if unresolved:
+                return jsonify({"error": "UNRESOLVED_CHECKS", "count": len(unresolved)}), 409
+        set_setting("locked_through", iso(lock_date) or "")
+        set_setting("updated_at", now().isoformat())
+        audit("update", "accounting_controls", detail={"lockedThrough": iso(lock_date), "previous": iso(previous)})
+        db.session.commit()
+        return jsonify({"lockedThrough": iso(lock_date)})
+
     @api.put("/state")
     def put_state():
         data = request.get_json(silent=True) or {}
@@ -716,14 +860,19 @@ def init_accounting_api(app, db, Sale, app_timezone):
             employee_ids = {upsert_employee(item).id for item in incoming_employees}
             payroll_ids = {upsert_payroll(item).id for item in incoming_payroll}
 
+            lock_date = locked_through()
             for row in AccountingPayroll.query.all():
                 if row.id not in payroll_ids:
+                    if lock_date and row.pay_date <= lock_date:
+                        raise PermissionError(f"period is closed through {lock_date.isoformat()}")
                     db.session.delete(row)
             for row in AccountingEmployee.query.all():
                 if row.id not in employee_ids and not AccountingDocument.query.filter_by(employee_id=row.id).first():
                     db.session.delete(row)
             for row in AccountingEntry.query.filter(AccountingEntry.source != "shop-db").all():
                 if row.id not in entry_ids:
+                    if lock_date and row.entry_date <= lock_date:
+                        raise PermissionError(f"period is closed through {lock_date.isoformat()}")
                     db.session.delete(row)
 
             completed = {str(value)[:120] for value in data.get("completedProcedures", [])}
@@ -747,6 +896,9 @@ def init_accounting_api(app, db, Sale, app_timezone):
             audit("sync", "state", detail={"entries": len(entry_ids), "employees": len(employee_ids), "payroll": len(payroll_ids)})
             db.session.commit()
             return jsonify(state_payload())
+        except PermissionError as error:
+            db.session.rollback()
+            return jsonify({"error": "PERIOD_CLOSED", "message": str(error), "lockedThrough": iso(locked_through())}), 409
         except (ValueError, TypeError) as error:
             db.session.rollback()
             return jsonify({"error": "INVALID_STATE", "message": str(error)}), 400
@@ -756,6 +908,23 @@ def init_accounting_api(app, db, Sale, app_timezone):
         grouped = shop_sales_by_day()
         expected_keys = {f"mooon-shop-day:{day}" for day in grouped}
         created = updated = removed_legacy = removed_duplicates = 0
+        lock_date = locked_through()
+
+        if lock_date:
+            for row in AccountingEntry.query.filter_by(source="shop-db").all():
+                if row.entry_date <= lock_date and row.import_key not in expected_keys:
+                    return jsonify({"error": "PERIOD_CLOSED", "lockedThrough": iso(lock_date)}), 409
+            for day, sales in grouped.items():
+                entry_date = date.fromisoformat(day)
+                if entry_date > lock_date:
+                    continue
+                payments = sales["paymentMethods"]
+                payment = next(iter(payments)) if len(payments) == 1 else "複数決済"
+                debit = "現金" if payments and payments <= {"现金", "現金"} else "普通預金" if payments and payments <= {"银行转账", "銀行振込"} else "未収入金"
+                description = f"Mooon Shop 日次売上（{sales['salesCount']}会計・{sales['itemCount']}点）"
+                row = AccountingEntry.query.filter_by(import_key=f"mooon-shop-day:{day}").first()
+                if not row or (row.description, row.debit_account, row.credit_account, row.amount, row.payment) != (description, debit, "売上高", sales["amount"], payment):
+                    return jsonify({"error": "PERIOD_CLOSED", "lockedThrough": iso(lock_date)}), 409
 
         for row in AccountingEntry.query.filter_by(source="shop-db").all():
             if row.import_key not in expected_keys:
@@ -763,6 +932,8 @@ def init_accounting_api(app, db, Sale, app_timezone):
                 removed_legacy += 1
 
         for day, sales in grouped.items():
+            if lock_date and date.fromisoformat(day) <= lock_date:
+                continue
             import_key = f"mooon-shop-day:{day}"
             row = AccountingEntry.query.filter_by(import_key=import_key).first()
             if row:
@@ -794,6 +965,9 @@ def init_accounting_api(app, db, Sale, app_timezone):
             AccountingEntry.credit_account == "売上高",
             AccountingEntry.import_key.isnot(None),
         ).all()
+        if lock_date and any(row.entry_date <= lock_date and iso(row.entry_date) in sale_dates for row in imported_shop_entries):
+            db.session.rollback()
+            return jsonify({"error": "PERIOD_CLOSED", "lockedThrough": iso(lock_date)}), 409
         for row in imported_shop_entries:
             if iso(row.entry_date) in sale_dates:
                 db.session.delete(row)
