@@ -373,8 +373,14 @@ def init_accounting_api(app, db, Sale, app_timezone):
             "importFileName": row.import_file_name, "importedAt": iso(row.imported_at),
             "version": row.version,
         }
-        if row.source == "shop-db" and shop_sales:
+        if row.source == "shop-db" and shop_sales and row.credit_account == "売上高":
             payload["details"] = shop_sales.get(iso(row.entry_date), {}).get("details", [])
+            summary = shop_sales.get(iso(row.entry_date), {})
+            payload["costAmount"] = summary.get("costAmount", 0)
+            payload["grossProfit"] = summary.get("amount", 0) - summary.get("costAmount", 0)
+            payload["grossMargin"] = round(
+                (summary.get("amount", 0) - summary.get("costAmount", 0)) * 100 / summary.get("amount", 0), 1
+            ) if summary.get("amount", 0) else 0
         return payload
 
     def shop_sales_by_day():
@@ -382,7 +388,7 @@ def init_accounting_api(app, db, Sale, app_timezone):
         for sale in Sale.query.order_by(Sale.created_at, Sale.id).all():
             day = sale.created_at.date().isoformat()
             group = groups.setdefault(day, {
-                "amount": 0, "salesCount": 0, "itemCount": 0,
+                "amount": 0, "costAmount": 0, "salesCount": 0, "itemCount": 0,
                 "paymentMethods": set(), "details": [],
             })
             payable = integer(round(sale.payable or 0))
@@ -398,12 +404,17 @@ def init_accounting_api(app, db, Sale, app_timezone):
                 allocated[-1] += payable - sum(allocated)
             for item, recognized_amount in zip(items, allocated):
                 quantity = integer(item.qty)
+                cost_amount = integer(round(float(item.cost_price or 0) * quantity))
                 group["itemCount"] += quantity
+                group["costAmount"] += cost_amount
                 group["details"].append({
                     "id": f"shop-item-{item.id}", "saleId": sale.id,
                     "soldAt": iso(sale.created_at), "name": item.name,
                     "quantity": quantity, "unitPrice": integer(round(item.price or 0)),
-                    "amount": recognized_amount, "payment": sale.payment_method or "未记录",
+                    "unitCost": integer(round(item.cost_price or 0)), "costAmount": cost_amount,
+                    "amount": recognized_amount, "grossProfit": recognized_amount - cost_amount,
+                    "grossMargin": round((recognized_amount - cost_amount) * 100 / recognized_amount, 1) if recognized_amount else 0,
+                    "payment": sale.payment_method or "未记录",
                 })
         return groups
 
@@ -907,6 +918,10 @@ def init_accounting_api(app, db, Sale, app_timezone):
     def sync_sales():
         grouped = shop_sales_by_day()
         expected_keys = {f"mooon-shop-day:{day}" for day in grouped}
+        expected_keys.update(
+            f"mooon-shop-day:{day}|cost_of_sales"
+            for day, sales in grouped.items() if sales["costAmount"] > 0
+        )
         created = updated = removed_legacy = removed_duplicates = 0
         lock_date = locked_through()
 
@@ -925,6 +940,13 @@ def init_accounting_api(app, db, Sale, app_timezone):
                 row = AccountingEntry.query.filter_by(import_key=f"mooon-shop-day:{day}").first()
                 if not row or (row.description, row.debit_account, row.credit_account, row.amount, row.payment) != (description, debit, "売上高", sales["amount"], payment):
                     return jsonify({"error": "PERIOD_CLOSED", "lockedThrough": iso(lock_date)}), 409
+                if sales["costAmount"] > 0:
+                    cost_row = AccountingEntry.query.filter_by(import_key=f"mooon-shop-day:{day}|cost_of_sales").first()
+                    cost_description = f"Mooon Shop 日次売上原価（{sales['itemCount']}点）"
+                    if not cost_row or (
+                        cost_row.description, cost_row.debit_account, cost_row.credit_account, cost_row.amount
+                    ) != (cost_description, "売上原価", "商品", sales["costAmount"]):
+                        return jsonify({"error": "PERIOD_CLOSED", "lockedThrough": iso(lock_date)}), 409
 
         for row in AccountingEntry.query.filter_by(source="shop-db").all():
             if row.import_key not in expected_keys:
@@ -958,6 +980,31 @@ def init_accounting_api(app, db, Sale, app_timezone):
             row.updated_at = now()
             row.version = (row.version or 0) + 1
             db.session.add(row)
+
+            if sales["costAmount"] > 0:
+                cost_import_key = f"{import_key}|cost_of_sales"
+                cost_row = AccountingEntry.query.filter_by(import_key=cost_import_key).first()
+                if cost_row:
+                    updated += 1
+                else:
+                    cost_row = AccountingEntry(
+                        id=f"shop-cost-day-{day}", import_key=cost_import_key, created_by="sales-sync"
+                    )
+                    created += 1
+                cost_row.entry_date = date.fromisoformat(day)
+                cost_row.description = f"Mooon Shop 日次売上原価（{sales['itemCount']}点）"
+                cost_row.source = "shop-db"
+                cost_row.debit_account = "売上原価"
+                cost_row.credit_account = "商品"
+                cost_row.amount = sales["costAmount"]
+                cost_row.status = "done"
+                cost_row.payment = ""
+                cost_row.import_batch_id = "shop-db"
+                cost_row.import_file_name = "Mooon Shop PostgreSQL"
+                cost_row.imported_at = now()
+                cost_row.updated_at = now()
+                cost_row.version = (cost_row.version or 0) + 1
+                db.session.add(cost_row)
 
         sale_dates = set(grouped)
         imported_shop_entries = AccountingEntry.query.filter(
