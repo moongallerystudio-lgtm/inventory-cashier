@@ -18,6 +18,7 @@
     .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border-radius: 8px; text-decoration: none; color: #fff; background: #2563eb; border: none; cursor: pointer; font-weight: 700; font-size: 16px; white-space: nowrap; }
     .button.red { background: #dc2626; }
     .button.green { background: #16a34a; }
+    .button.orange { background: #ea580c; }
     .button.gray { background: #475569; }
     .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
     .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px; }
@@ -27,7 +28,7 @@
     input[type=text], input[type=number], input[type=file], input[type=search] { width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: #fff; }
     .table-wrap { min-width: 0; overflow-x: auto; margin-top: 12px; border: 1px solid #dde5ee; border-radius: 8px; -webkit-overflow-scrolling: touch; }
     .inventory-table-wrap { max-height: 925px; overflow: auto; }
-    table { width: 100%; min-width: 1160px; border-collapse: collapse; }
+    table { width: 100%; min-width: 1220px; border-collapse: collapse; }
     th, td { padding: 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: middle; }
     th { background: #f1f5f9; color: #334155; font-size: 14px; }
     .inventory-table-wrap th { position: sticky; top: 0; z-index: 1; }
@@ -40,6 +41,7 @@
     .artist-tile.restock-needed:hover { border-color: #dc2626; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.16); }
     .inventory-row.restock-needed td { background: #fff1f2; }
     .inventory-row.restock-needed:hover td { background: #ffe4e6; }
+    .inventory-row.archived td { background: #f8fafc; color: #64748b; }
     .inventory-active-artist { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
     .inventory-active-artist.show { display: flex; }
     .inventory-artist-title { font-weight: 700; color: #334155; }
@@ -67,7 +69,7 @@
       .button { width: 100%; }
       .inventory-table-wrap { max-height: 685px; }
       .table-wrap { width: 100%; overflow-x: auto; }
-      table { min-width: 1160px; table-layout: auto; }
+      table { min-width: 1220px; table-layout: auto; }
       th, td { padding: 10px 12px; font-size: 13px; word-break: normal; white-space: nowrap; }
       th { font-size: 12px; }
       .action-cell, .action-cell form { flex-direction: column; width: 100%; }
@@ -128,7 +130,16 @@
         </p>
       </div>
       <div class="panel">
-        <h2>{{ t('current_inventory') }}</h2>
+        <div class="topbar" style="margin-bottom:0;">
+          <h2>{{ t('archived_inventory') if show_archived else t('current_inventory') }}</h2>
+          <div class="toolbar">
+            {% if show_archived %}
+              <a class="button gray" href="/manage">{{ t('show_active') }}</a>
+            {% else %}
+              <a class="button gray" href="/manage?show_archived=1">{{ t('show_archived') }}{% if archived_count %} ({{ archived_count }}){% endif %}</a>
+            {% endif %}
+          </div>
+        </div>
         <div class="search-row">
           <label>{{ t('product_search') }}<input id="inventorySearch" type="search" autocomplete="off" placeholder="{{ t('product_search_placeholder') }}"></label>
           <button class="button gray" type="button" id="clearInventorySearch">{{ t('clear') }}</button>
@@ -137,6 +148,11 @@
         <div id="inventoryActiveArtist" class="inventory-active-artist">
           <button type="button" class="button gray" id="backToInventoryArtists"></button>
           <span class="inventory-artist-title" id="inventoryActiveArtistName"></span>
+          <form method="post" action="/manage/archive-artist" onsubmit="return confirm({{ (t('restore_artist_confirm') if show_archived else t('archive_artist_confirm'))|tojson }});">
+            <input type="hidden" name="artist" id="archiveArtistInput">
+            {% if show_archived %}<input type="hidden" name="restore" value="1">{% endif %}
+            <button type="submit" class="button {{ 'green' if show_archived else 'orange' }}">{{ t('restore_artist') if show_archived else t('archive_artist') }}</button>
+          </form>
         </div>
         <div id="inventoryTableWrap" class="table-wrap inventory-table-wrap" style="display:none;">
           <table>
@@ -145,7 +161,7 @@
             </thead>
             <tbody id="inventoryTableBody">
               {% for product in inventory %}
-                <tr class="inventory-row{% if product.restock_needed %} restock-needed{% endif %}" data-artist="{{ product.artist or '' }}" data-restock="{{ '1' if product.restock_needed else '0' }}" data-search="{{ (product.name ~ ' ' ~ product.label_barcode)|lower }}">
+                <tr class="inventory-row{% if product.restock_needed and not product.is_archived %} restock-needed{% endif %}{% if product.is_archived %} archived{% endif %}" data-artist="{{ product.artist or '' }}" data-restock="{{ '1' if product.restock_needed and not product.is_archived else '0' }}" data-search="{{ (product.name ~ ' ' ~ product.label_barcode)|lower }}">
                   <td>
                     {% if product.label_barcode %}
                       <img class="label-barcode" src="/product-label-barcode/{{ product.barcode|urlencode }}" alt="{{ product.label_barcode }}">
@@ -164,6 +180,15 @@
                   <td>
                     <div class="action-cell">
                     <a class="button green" href="/manage?edit={{ product.barcode|urlencode }}#productFormPanel">{{ t('edit') }}</a>
+                    {% if product.is_archived %}
+                      <form method="post" action="/manage/restore/{{ product.barcode|urlencode }}" onsubmit="return confirm({{ t('restore_product_confirm')|tojson }});">
+                        <button class="button green" type="submit">{{ t('restore') }}</button>
+                      </form>
+                    {% else %}
+                      <form method="post" action="/manage/archive/{{ product.barcode|urlencode }}" onsubmit="return confirm({{ t('archive_product_confirm')|tojson }});">
+                        <button class="button orange" type="submit">{{ t('archive') }}</button>
+                      </form>
+                    {% endif %}
                     <a class="button red" href="/manage/delete/{{ product.barcode|urlencode }}/confirm">{{ t('delete') }}</a>
                     </div>
                   </td>
@@ -224,7 +249,7 @@
     });
   </script>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="/static/main.js?v=20260831-gross-margin-input"></script>
+  <script src="/static/main.js?v=20260910-archive-products"></script>
 </body>
 </html>
 <!-- Quagga fallback loaded before main.js when BarcodeDetector isn't available on mobile -->

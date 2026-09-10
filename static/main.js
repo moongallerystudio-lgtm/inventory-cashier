@@ -941,12 +941,14 @@ function showInventoryArtistProducts(artistName) {
   const tableWrap = document.getElementById('inventoryTableWrap');
   const activeArtistBar = document.getElementById('inventoryActiveArtist');
   const activeArtistName = document.getElementById('inventoryActiveArtistName');
+  const archiveArtistInput = document.getElementById('archiveArtistInput');
   const backButton = document.getElementById('backToInventoryArtists');
 
   if (artistContainer) artistContainer.innerHTML = '';
   if (tableWrap) tableWrap.style.display = '';
   if (activeArtistBar) activeArtistBar.classList.add('show');
   if (activeArtistName) activeArtistName.textContent = inventoryArtistLabel(activeInventoryArtist);
+  if (archiveArtistInput) archiveArtistInput.value = activeInventoryArtist;
   if (backButton) {
     backButton.textContent = tr('backToArtists', '返回艺术家列表');
     backButton.onclick = () => {

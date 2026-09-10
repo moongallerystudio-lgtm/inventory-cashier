@@ -67,6 +67,8 @@ TRANSLATIONS = {
         "save": "保存",
         "edit": "编辑",
         "delete": "删除",
+        "archive": "下架",
+        "restore": "恢复上架",
         "remove": "移除",
         "checkout": "结账",
         "print_receipt": "打印小票",
@@ -133,6 +135,19 @@ TRANSLATIONS = {
         "sale_deleted": "销售单已删除，库存已恢复",
         "sale_not_found": "未找到销售单",
         "delete_product_confirm": "确认删除这个商品？",
+        "archive_product_confirm": "确认下架这个商品？下架后不会从系统删除，但收银中不再显示。",
+        "restore_product_confirm": "确认恢复这个商品上架？",
+        "archive_artist_confirm": "确认下架该艺术家下的所有商品？商品不会删除。",
+        "restore_artist_confirm": "确认恢复该艺术家下的所有商品？",
+        "product_archived": "商品已下架",
+        "product_restored": "商品已恢复上架",
+        "artist_archived": "该艺术家商品已下架",
+        "artist_restored": "该艺术家商品已恢复上架",
+        "show_archived": "查看下架商品",
+        "show_active": "查看在售商品",
+        "archive_artist": "下架该艺术家商品",
+        "restore_artist": "恢复该艺术家商品",
+        "archived_inventory": "下架商品",
         "confirm_delete_product": "确认删除商品",
         "confirm_delete_hint": "删除后无法恢复，请确认是否继续。",
         "confirm_delete": "确认删除",
@@ -181,6 +196,8 @@ TRANSLATIONS = {
         "save": "Save",
         "edit": "Edit",
         "delete": "Delete",
+        "archive": "Archive",
+        "restore": "Restore",
         "remove": "Remove",
         "checkout": "Checkout",
         "print_receipt": "Print Receipt",
@@ -247,6 +264,19 @@ TRANSLATIONS = {
         "sale_deleted": "Sale deleted and stock restored",
         "sale_not_found": "Sale not found",
         "delete_product_confirm": "Delete this product?",
+        "archive_product_confirm": "Archive this product? It will remain in the system but will not appear in cashier.",
+        "restore_product_confirm": "Restore this product for sale?",
+        "archive_artist_confirm": "Archive all products for this artist? Products will not be deleted.",
+        "restore_artist_confirm": "Restore all products for this artist?",
+        "product_archived": "Product archived",
+        "product_restored": "Product restored",
+        "artist_archived": "Artist products archived",
+        "artist_restored": "Artist products restored",
+        "show_archived": "View Archived",
+        "show_active": "View Active",
+        "archive_artist": "Archive Artist Products",
+        "restore_artist": "Restore Artist Products",
+        "archived_inventory": "Archived Products",
         "confirm_delete_product": "Confirm Product Deletion",
         "confirm_delete_hint": "This cannot be undone. Please confirm before continuing.",
         "confirm_delete": "Confirm Delete",
@@ -295,6 +325,8 @@ TRANSLATIONS = {
         "save": "保存",
         "edit": "編集",
         "delete": "削除",
+        "archive": "下架",
+        "restore": "販売再開",
         "remove": "削除",
         "checkout": "会計",
         "print_receipt": "レシート印刷",
@@ -361,6 +393,19 @@ TRANSLATIONS = {
         "sale_deleted": "売上を削除し、在庫を戻しました",
         "sale_not_found": "売上が見つかりません",
         "delete_product_confirm": "この商品を削除しますか？",
+        "archive_product_confirm": "この商品を下架しますか？商品は削除されませんが、レジには表示されません。",
+        "restore_product_confirm": "この商品を販売再開しますか？",
+        "archive_artist_confirm": "このアーティストの商品をすべて下架しますか？商品は削除されません。",
+        "restore_artist_confirm": "このアーティストの商品をすべて販売再開しますか？",
+        "product_archived": "商品を下架しました",
+        "product_restored": "商品を販売再開しました",
+        "artist_archived": "アーティストの商品を下架しました",
+        "artist_restored": "アーティストの商品を販売再開しました",
+        "show_archived": "下架商品を見る",
+        "show_active": "販売中商品を見る",
+        "archive_artist": "このアーティストの商品を下架",
+        "restore_artist": "このアーティストの商品を販売再開",
+        "archived_inventory": "下架商品",
         "confirm_delete_product": "商品削除の確認",
         "confirm_delete_hint": "削除後は元に戻せません。続行する前に確認してください。",
         "confirm_delete": "削除する",
@@ -418,6 +463,7 @@ class Product(db.Model):
     cost_price = db.Column(db.Float, nullable=False, default=0.0)
     stock = db.Column(db.Integer, nullable=False, default=0)
     warehouse_stock = db.Column(db.Integer, nullable=False, default=0)
+    is_archived = db.Column(db.Boolean, nullable=False, default=False)
     image = db.Column(db.String(512), nullable=True)
     image_data = db.Column(db.LargeBinary, nullable=True)
     image_mime = db.Column(db.String(128), nullable=True)
@@ -434,6 +480,7 @@ class Product(db.Model):
             "gross_margin": gross_margin_percent(self.price, self.cost_price),
             "stock": self.stock,
             "warehouse_stock": self.warehouse_stock or 0,
+            "is_archived": bool(self.is_archived),
             "restock_needed": (self.stock or 0) < 5,
             "image": self.image,
             "has_image": has_image,
@@ -505,6 +552,9 @@ def ensure_schema():
             db.session.execute(text("ALTER TABLE products ADD COLUMN label_barcode VARCHAR(32)"))
         if "warehouse_stock" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN warehouse_stock INTEGER NOT NULL DEFAULT 0"))
+        if "is_archived" not in product_columns:
+            archived_default = "FALSE" if db.engine.dialect.name == "postgresql" else "0"
+            db.session.execute(text(f"ALTER TABLE products ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT {archived_default}"))
         if "cost_price" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN cost_price FLOAT NOT NULL DEFAULT 0"))
         if "artist" not in product_columns:
@@ -791,6 +841,12 @@ def format_percent(value):
         return "-"
 
 
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
+
+
 app.jinja_env.filters["jpy"] = format_jpy
 app.jinja_env.filters["percent"] = format_percent
 
@@ -829,8 +885,9 @@ def set_language(lang):
     return redirect(target)
 
 
-def load_inventory():
-    return [product.to_dict() for product in Product.query.order_by(Product.barcode).all()]
+def load_inventory(include_archived=False):
+    query = Product.query.filter(Product.is_archived.is_(bool(include_archived)))
+    return [product.to_dict() for product in query.order_by(Product.barcode).all()]
 
 
 def save_inventory(data):
@@ -845,6 +902,7 @@ def save_inventory(data):
                 "cost_price": float(item.get("cost_price", 0) or 0),
                 "stock": int((item.get("store_stock") if item.get("store_stock") not in (None, "") else item.get("stock", 0)) or 0),
                 "warehouse_stock": int(item.get("warehouse_stock", 0) or 0),
+                "is_archived": parse_bool(item.get("is_archived", False)),
                 "image": str(item.get("image", "") or None) if item.get("image") else None,
             }
         except (ValueError, TypeError):
@@ -975,6 +1033,7 @@ def update_product(product):
         existing.cost_price = product.get("cost_price", existing.cost_price) or 0
         existing.stock = product["stock"]
         existing.warehouse_stock = product.get("warehouse_stock", existing.warehouse_stock) or 0
+        existing.is_archived = bool(product.get("is_archived", existing.is_archived))
         existing.image = product.get("image")
         if "image_data" in product:
             existing.image_data = product.get("image_data")
@@ -989,6 +1048,7 @@ def update_product(product):
             cost_price=product.get("cost_price", 0) or 0,
             stock=product["stock"],
             warehouse_stock=product.get("warehouse_stock", 0) or 0,
+            is_archived=bool(product.get("is_archived", False)),
             image=product.get("image"),
             image_data=product.get("image_data"),
             image_mime=product.get("image_mime"),
@@ -1269,6 +1329,7 @@ def parse_inventory_file(file_storage):
                     "cost_price": inventory_row_cost_price(price, row),
                     "stock": int((row.get("store_stock") if row.get("store_stock") not in (None, "") else row.get("stock", 0)) or 0),
                     "warehouse_stock": int(row.get("warehouse_stock", 0) or 0),
+                    "is_archived": parse_bool(row.get("is_archived", "")),
                     "image": str(row.get("image", "")).strip() or None,
                 })
             except ValueError:
@@ -1296,6 +1357,7 @@ def parse_inventory_file(file_storage):
                     "cost_price": inventory_row_cost_price(price, row_data),
                     "stock": int((row_data.get("store_stock") if row_data.get("store_stock") not in (None, "") else row_data.get("stock", 0)) or 0),
                     "warehouse_stock": int(row_data.get("warehouse_stock", 0) or 0),
+                    "is_archived": parse_bool(row_data.get("is_archived", "")),
                     "image": str(row_data.get("image", "")).strip() or None,
                 })
             except ValueError:
@@ -1378,11 +1440,20 @@ def product_label_barcode(barcode):
 
 @app.route("/manage")
 def manage():
-    inventory = load_inventory()
+    show_archived = request.args.get("show_archived") == "1"
+    inventory = load_inventory(include_archived=show_archived)
     edit_barcode = request.args.get("edit", "").strip()
     edit_product = find_product(edit_barcode) if edit_barcode else None
     edit_gross_margin = gross_margin_percent(edit_product.price, edit_product.cost_price) if edit_product else 0
-    return render_template("manage.html", inventory=inventory, edit_product=edit_product, edit_gross_margin=edit_gross_margin)
+    archived_count = Product.query.filter(Product.is_archived.is_(True)).count()
+    return render_template(
+        "manage.html",
+        inventory=inventory,
+        edit_product=edit_product,
+        edit_gross_margin=edit_gross_margin,
+        show_archived=show_archived,
+        archived_count=archived_count,
+    )
 
 
 @app.route("/manage/add", methods=["POST"])
@@ -1466,6 +1537,39 @@ def manage_delete(barcode):
     return redirect(url_for("manage"))
 
 
+@app.route("/manage/archive/<barcode>", methods=["POST"])
+def manage_archive(barcode):
+    product = Product.query.get(barcode)
+    if product:
+        product.is_archived = True
+        db.session.commit()
+        flash(translate("product_archived"), "success")
+    return redirect(url_for("manage"))
+
+
+@app.route("/manage/restore/<barcode>", methods=["POST"])
+def manage_restore(barcode):
+    product = Product.query.get(barcode)
+    if product:
+        product.is_archived = False
+        db.session.commit()
+        flash(translate("product_restored"), "success")
+    return redirect(url_for("manage", show_archived=1))
+
+
+@app.route("/manage/archive-artist", methods=["POST"])
+def manage_archive_artist():
+    artist = request.form.get("artist", "")
+    restore = request.form.get("restore") == "1"
+    query = Product.query.filter(Product.artist == artist)
+    products = query.all()
+    for product in products:
+        product.is_archived = not restore
+    db.session.commit()
+    flash(translate("artist_restored" if restore else "artist_archived"), "success")
+    return redirect(url_for("manage", show_archived=1) if restore else url_for("manage"))
+
+
 @app.route("/manage/import", methods=["POST"])
 def manage_import():
     inventory_file = request.files.get("inventory_file")
@@ -1523,7 +1627,7 @@ def manage_export(fmt):
             "warehouse_stock",
             "product_image",
         ])
-        product_rows = Product.query.order_by(Product.barcode).all()
+        product_rows = Product.query.filter(Product.is_archived.is_(False)).order_by(Product.barcode).all()
         for row_index, product in enumerate(product_rows, start=2):
             sheet.append([
                 "",
@@ -1768,7 +1872,7 @@ def sales_export(fmt):
 @app.route("/api/product/<barcode>")
 def api_product(barcode):
     product = find_product(barcode)
-    if product:
+    if product and not product.is_archived:
         return jsonify({"found": True, "product": product.to_dict()})
     return jsonify({"found": False}), 404
 
@@ -1778,6 +1882,7 @@ def api_artists():
     keyword = request.args.get("q", "").strip()
     query = (
         Product.query
+        .filter(Product.is_archived.is_(False))
         .with_entities(Product.artist, func.count(Product.barcode))
     )
     if keyword:
@@ -1801,7 +1906,7 @@ def api_artists():
 def api_products_search():
     keyword = request.args.get("q", "").strip()
     artist = request.args.get("artist", "").strip()
-    query = Product.query
+    query = Product.query.filter(Product.is_archived.is_(False))
     if "artist" in request.args:
         query = query.filter(Product.artist == artist)
     if keyword:
@@ -1829,6 +1934,8 @@ def api_cashier_scan():
     product = find_product(barcode)
     if not product:
         return jsonify({"error": "未找到商品"}), 404
+    if product.is_archived:
+        return jsonify({"error": "商品已下架"}), 400
 
     cart_barcode = product.barcode
     cart = get_cart()
@@ -1879,6 +1986,12 @@ def api_update_cart_item(barcode):
         cart_data = cart_payload()
         save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
         return jsonify({"error": "商品不存在，已从购物车移除", "cart": cart_data}), 404
+    if product.is_archived:
+        cart.pop(barcode, None)
+        save_cart(cart)
+        cart_data = cart_payload()
+        save_customer_display(display_payload(cart_data["items"], cart_data["total"], "active"))
+        return jsonify({"error": "商品已下架，已从购物车移除", "cart": cart_data}), 400
 
     if qty > product.stock:
         return jsonify({"error": f"库存不足，当前库存 {product.stock}"}), 400
@@ -1916,6 +2029,8 @@ def api_checkout():
         product = find_product(barcode)
         if not product:
             return jsonify({"error": f"商品 {barcode} 不存在，请先移出购物车"}), 400
+        if product.is_archived:
+            return jsonify({"error": f"{product.name} 已下架，请先移出购物车"}), 400
         if qty > product.stock:
             return jsonify({"error": f"{product.name} 库存不足，当前库存 {product.stock}"}), 400
         subtotal = round(product.price * qty)
