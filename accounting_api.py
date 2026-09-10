@@ -663,7 +663,7 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
             for item, body, digest in document_payloads:
                 category = str(item.get("category") or "")[:40]
                 mime_type = str(item.get("mimeType") or "application/octet-stream")[:200]
-                if category not in {"year_end", "schedule"} or mime_type not in ALLOWED_DOCUMENT_TYPES:
+                if category not in {"year_end", "schedule", "expense"} or mime_type not in ALLOWED_DOCUMENT_TYPES:
                     raise ValueError("backup contains an unsupported document")
                 db.session.add(AccountingDocument(
                     id=str(item.get("id") or f"doc-{uuid.uuid4()}")[:100], category=category,
@@ -1124,7 +1124,7 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
         if mime_type not in ALLOWED_DOCUMENT_TYPES:
             return jsonify({"error": "UNSUPPORTED_FILE"}), 415
         category = str(request.form.get("category") or "")[:40]
-        if category not in {"year_end", "schedule"}:
+        if category not in {"year_end", "schedule", "expense"}:
             return jsonify({"error": "INVALID_CATEGORY"}), 400
         digest = hashlib.sha256(content).hexdigest()
         related_id = str(request.form.get("itemId") or "")[:120] or None
