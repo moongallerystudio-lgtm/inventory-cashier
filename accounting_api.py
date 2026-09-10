@@ -43,7 +43,7 @@ ALLOWED_DOCUMENT_TYPES = {
 }
 
 
-def init_accounting_api(app, db, Sale, app_timezone):
+def init_accounting_api(app, db, Sale, app_timezone, Product=None):
     class AccountingEntry(db.Model):
         __tablename__ = "accounting_entries"
         id = db.Column(db.String(80), primary_key=True)
@@ -385,7 +385,13 @@ def init_accounting_api(app, db, Sale, app_timezone):
 
     def shop_sales_by_day():
         groups = {}
-        for sale in Sale.query.order_by(Sale.created_at, Sale.id).all():
+        sales = Sale.query.order_by(Sale.created_at, Sale.id).all()
+        barcodes = {item.barcode for sale in sales for item in sale.items if item.barcode}
+        products = {
+            product.barcode: product
+            for product in Product.query.filter(Product.barcode.in_(barcodes)).all()
+        } if Product is not None and barcodes else {}
+        for sale in sales:
             day = sale.created_at.date().isoformat()
             group = groups.setdefault(day, {
                 "amount": 0, "costAmount": 0, "salesCount": 0, "itemCount": 0,
@@ -404,14 +410,16 @@ def init_accounting_api(app, db, Sale, app_timezone):
                 allocated[-1] += payable - sum(allocated)
             for item, recognized_amount in zip(items, allocated):
                 quantity = integer(item.qty)
-                cost_amount = integer(round(float(item.cost_price or 0) * quantity))
+                product = products.get(item.barcode)
+                unit_cost = float(item.cost_price or (product.cost_price if product else 0) or 0)
+                cost_amount = integer(round(unit_cost * quantity))
                 group["itemCount"] += quantity
                 group["costAmount"] += cost_amount
                 group["details"].append({
                     "id": f"shop-item-{item.id}", "saleId": sale.id,
                     "soldAt": iso(sale.created_at), "name": item.name,
                     "quantity": quantity, "unitPrice": integer(round(item.price or 0)),
-                    "unitCost": integer(round(item.cost_price or 0)), "costAmount": cost_amount,
+                    "unitCost": integer(round(unit_cost)), "costAmount": cost_amount,
                     "amount": recognized_amount, "grossProfit": recognized_amount - cost_amount,
                     "grossMargin": round((recognized_amount - cost_amount) * 100 / recognized_amount, 1) if recognized_amount else 0,
                     "payment": sale.payment_method or "未记录",

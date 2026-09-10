@@ -489,7 +489,7 @@ class CustomerDisplayState(db.Model):
 # Register the private accounting tables and API before db.create_all() runs.
 # The API is protected by ACCOUNTING_API_TOKEN and is intended for server-to-server use.
 from accounting_api import init_accounting_api
-init_accounting_api(app, db, Sale, APP_TIMEZONE)
+init_accounting_api(app, db, Sale, APP_TIMEZONE, Product)
 
 
 def ensure_directories():
