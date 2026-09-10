@@ -103,6 +103,23 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
         completed_at = db.Column(db.DateTime, nullable=True)
         updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None))
 
+    class AccountingExpense(db.Model):
+        __tablename__ = "accounting_expenses"
+        id = db.Column(db.String(100), primary_key=True)
+        entry_id = db.Column(db.String(80), nullable=True, index=True)
+        expense_date = db.Column(db.Date, nullable=False, index=True)
+        vendor = db.Column(db.String(300), nullable=False, default="")
+        invoice_number = db.Column(db.String(200), nullable=False, default="")
+        description = db.Column(db.String(700), nullable=False, default="")
+        business_unit = db.Column(db.String(20), nullable=False, default="common", index=True)
+        expense_account = db.Column(db.String(120), nullable=False, default="")
+        payment_account = db.Column(db.String(120), nullable=False, default="")
+        tax_category = db.Column(db.String(40), nullable=False, default="tax10")
+        note = db.Column(db.String(1000), nullable=False, default="")
+        amount = db.Column(db.Integer, nullable=False, default=0)
+        created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None))
+        updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(app_timezone).replace(tzinfo=None), index=True)
+
     class AccountingDocument(db.Model):
         __tablename__ = "accounting_documents"
         id = db.Column(db.String(100), primary_key=True)
@@ -444,6 +461,16 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
             "version": row.version,
         }
 
+    def expense_dict(row):
+        return {
+            "id": row.id, "entryId": row.entry_id, "date": iso(row.expense_date),
+            "vendor": row.vendor, "invoiceNumber": row.invoice_number,
+            "description": row.description, "businessUnit": row.business_unit,
+            "expenseAccount": row.expense_account, "paymentAccount": row.payment_account,
+            "taxCategory": row.tax_category, "note": row.note, "amount": row.amount,
+            "createdAt": iso(row.created_at), "updatedAt": iso(row.updated_at),
+        }
+
     def document_dict(row):
         return {
             "id": row.id, "category": row.category, "itemId": row.related_id,
@@ -724,6 +751,38 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
         db.session.add(row)
         return row
 
+    def parse_datetime(value, fallback=None):
+        if not value:
+            return fallback or now()
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return fallback or now()
+
+    def upsert_expense(data):
+        row_id = str(data.get("id") or f"expense-{uuid.uuid4()}")[:100]
+        row = db.session.get(AccountingExpense, row_id)
+        incoming_updated_at = parse_datetime(data.get("updatedAt"))
+        if row and row.updated_at and row.updated_at > incoming_updated_at:
+            return row
+        row = row or AccountingExpense(id=row_id)
+        row.entry_id = str(data.get("entryId") or "")[:80] or None
+        row.expense_date = parse_date(data.get("date"), True)
+        row.vendor = str(data.get("vendor") or "")[:300]
+        row.invoice_number = str(data.get("invoiceNumber") or "")[:200]
+        row.description = str(data.get("description") or "")[:700]
+        unit = str(data.get("businessUnit") or "common")
+        row.business_unit = unit if unit in {"shop", "gallery", "common"} else "common"
+        row.expense_account = str(data.get("expenseAccount") or "")[:120]
+        row.payment_account = str(data.get("paymentAccount") or "")[:120]
+        row.tax_category = str(data.get("taxCategory") or "tax10")[:40]
+        row.note = str(data.get("note") or "")[:1000]
+        row.amount = integer(data.get("amount"))
+        row.created_at = parse_datetime(data.get("createdAt"), row.created_at if row else None)
+        row.updated_at = incoming_updated_at
+        db.session.add(row)
+        return row
+
     def state_payload():
         settings = {row.key: row.value for row in AccountingSetting.query.all()}
         shop_sales = shop_sales_by_day()
@@ -732,6 +791,8 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
             "entries": [entry_dict(row, shop_sales) for row in AccountingEntry.query.order_by(AccountingEntry.entry_date).all()],
             "employees": [employee_dict(row) for row in AccountingEmployee.query.order_by(AccountingEmployee.created_at).all()],
             "payrollRecords": [payroll_dict(row) for row in AccountingPayroll.query.order_by(AccountingPayroll.month).all()],
+            "expenses": [expense_dict(row) for row in AccountingExpense.query.order_by(AccountingExpense.expense_date).all()]
+            if settings.get("expenses_initialized") == "true" else None,
             "completedProcedures": [row.item_id for row in AccountingProcedure.query.filter_by(completed=True).all()],
             "profile": json.loads(settings.get("profile", "{}")),
             "controls": {"lockedThrough": settings.get("locked_through") or None},
@@ -875,9 +936,14 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
             incoming_entries = data.get("entries") if isinstance(data.get("entries"), list) else []
             incoming_employees = data.get("employees") if isinstance(data.get("employees"), list) else []
             incoming_payroll = data.get("payrollRecords") if isinstance(data.get("payrollRecords"), list) else []
+            incoming_expenses = data.get("expenses") if isinstance(data.get("expenses"), list) else []
             entry_ids = {upsert_entry(item).id for item in incoming_entries}
             employee_ids = {upsert_employee(item).id for item in incoming_employees}
             payroll_ids = {upsert_payroll(item).id for item in incoming_payroll}
+            for item in incoming_expenses:
+                upsert_expense(item)
+            if "expenses" in data:
+                set_setting("expenses_initialized", "true")
 
             lock_date = locked_through()
             for row in AccountingPayroll.query.all():
