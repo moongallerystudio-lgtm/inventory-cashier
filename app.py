@@ -484,7 +484,7 @@ class Product(db.Model):
             "restock_needed": (self.stock or 0) < 5,
             "image": self.image,
             "has_image": has_image,
-            "image_url": f"/product-image/{self.barcode}" if has_image else None,
+            "image_url": product_image_url(self),
         }
 
 class Member(db.Model):
@@ -847,6 +847,26 @@ def parse_bool(value):
     return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
 
 
+def product_image_version(product):
+    if product.image_data:
+        return hashlib.sha1(product.image_data).hexdigest()[:12]
+    if product.image:
+        image_path = BASE / "static" / product.image
+        if image_path.exists() and image_path.is_file():
+            stat = image_path.stat()
+            return f"{stat.st_mtime_ns}-{stat.st_size}"
+        return hashlib.sha1(product.image.encode("utf-8")).hexdigest()[:12]
+    return ""
+
+
+def product_image_url(product):
+    if not product or not (product.image_data or product.image):
+        return None
+    version = product_image_version(product)
+    suffix = f"?v={version}" if version else ""
+    return f"/product-image/{product.barcode}{suffix}"
+
+
 app.jinja_env.filters["jpy"] = format_jpy
 app.jinja_env.filters["percent"] = format_percent
 
@@ -1107,7 +1127,7 @@ def cart_items():
             "qty": qty,
             "subtotal": subtotal,
             "image": product.image,
-            "image_url": f"/product-image/{product.barcode}" if (product.image_data or product.image) else None,
+            "image_url": product_image_url(product),
         })
         total += subtotal
     return items, total
@@ -2044,7 +2064,7 @@ def api_checkout():
             "qty": qty,
             "subtotal": subtotal,
             "image": product.image,
-            "image_url": f"/product-image/{product.barcode}" if (product.image_data or product.image) else None,
+            "image_url": product_image_url(product),
         })
 
     total = round(total)
