@@ -467,6 +467,7 @@ class Product(db.Model):
     image = db.Column(db.String(512), nullable=True)
     image_data = db.Column(db.LargeBinary, nullable=True)
     image_mime = db.Column(db.String(128), nullable=True)
+    image_version = db.Column(db.String(64), nullable=True)
 
     def to_dict(self):
         has_image = bool(self.image_data or self.image)
@@ -564,6 +565,8 @@ def ensure_schema():
             db.session.execute(text(f"ALTER TABLE products ADD COLUMN image_data {image_data_type}"))
         if "image_mime" not in product_columns:
             db.session.execute(text("ALTER TABLE products ADD COLUMN image_mime VARCHAR(128)"))
+        if "image_version" not in product_columns:
+            db.session.execute(text("ALTER TABLE products ADD COLUMN image_version VARCHAR(64)"))
         db.session.commit()
     if "sales" not in table_names:
         return
@@ -586,7 +589,21 @@ def backfill_product_image_data():
         if image_path.exists() and image_path.is_file():
             product.image_data = image_path.read_bytes()
             product.image_mime = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
+            product.image_version = compute_product_image_version(product)
             changed = True
+    if changed:
+        db.session.commit()
+
+
+def backfill_product_image_versions():
+    changed = False
+    products = Product.query.filter(
+        or_(Product.image_version.is_(None), Product.image_version == ""),
+        or_(Product.image_data.isnot(None), Product.image.isnot(None)),
+    ).all()
+    for product in products:
+        product.image_version = compute_product_image_version(product)
+        changed = True
     if changed:
         db.session.commit()
 
@@ -785,14 +802,6 @@ def ean13_png(code):
     return output
 
 
-with app.app_context():
-    ensure_directories()
-    db.create_all()
-    ensure_schema()
-    backfill_product_image_data()
-    backfill_product_label_barcodes()
-
-
 def get_language():
     lang = session.get("lang", "zh")
     return lang if lang in LANGUAGES else "zh"
@@ -847,7 +856,7 @@ def parse_bool(value):
     return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
 
 
-def product_image_version(product):
+def compute_product_image_version(product):
     if product.image_data:
         return hashlib.sha1(product.image_data).hexdigest()[:12]
     if product.image:
@@ -857,6 +866,10 @@ def product_image_version(product):
             return f"{stat.st_mtime_ns}-{stat.st_size}"
         return hashlib.sha1(product.image.encode("utf-8")).hexdigest()[:12]
     return ""
+
+
+def product_image_version(product):
+    return product.image_version or compute_product_image_version(product)
 
 
 def product_image_url(product):
@@ -869,6 +882,15 @@ def product_image_url(product):
 
 app.jinja_env.filters["jpy"] = format_jpy
 app.jinja_env.filters["percent"] = format_percent
+
+
+with app.app_context():
+    ensure_directories()
+    db.create_all()
+    ensure_schema()
+    backfill_product_image_data()
+    backfill_product_image_versions()
+    backfill_product_label_barcodes()
 
 
 def local_now():
@@ -1038,6 +1060,7 @@ def save_product_image(file_storage, barcode):
         "path": f"uploads/{target_name}",
         "data": image_bytes,
         "mime": image_mime,
+        "version": hashlib.sha1(image_bytes).hexdigest()[:12],
     }
 
 
@@ -1058,6 +1081,7 @@ def update_product(product):
         if "image_data" in product:
             existing.image_data = product.get("image_data")
             existing.image_mime = product.get("image_mime")
+            existing.image_version = product.get("image_version") or compute_product_image_version(existing)
     else:
         existing = Product(
             barcode=product["barcode"],
@@ -1072,6 +1096,7 @@ def update_product(product):
             image=product.get("image"),
             image_data=product.get("image_data"),
             image_mime=product.get("image_mime"),
+            image_version=product.get("image_version"),
         )
         if not existing.label_barcode:
             ensure_unique_label_barcode(existing)
@@ -1509,11 +1534,13 @@ def manage_add():
     image_path = existing.image if existing else None
     image_data = existing.image_data if existing else None
     image_mime = existing.image_mime if existing else None
+    image_version = existing.image_version if existing else None
     uploaded_image = save_product_image(image_file, barcode)
     if uploaded_image:
         image_path = uploaded_image["path"]
         image_data = uploaded_image["data"]
         image_mime = uploaded_image["mime"]
+        image_version = uploaded_image["version"]
     product = {
         "barcode": barcode,
         "name": name,
@@ -1525,6 +1552,7 @@ def manage_add():
         "image": image_path,
         "image_data": image_data,
         "image_mime": image_mime,
+        "image_version": image_version,
     }
     update_product(product)
     flash("商品已保存", "success")
