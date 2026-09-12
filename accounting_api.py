@@ -19,6 +19,7 @@ from flask import g
 from jwt import PyJWKClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import load_only
 
 
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
@@ -406,7 +407,7 @@ def init_accounting_api(app, db, Sale, app_timezone, Product=None):
         barcodes = {item.barcode for sale in sales for item in sale.items if item.barcode}
         products = {
             product.barcode: product
-            for product in Product.query.filter(Product.barcode.in_(barcodes)).all()
+            for product in Product.query.options(load_only(Product.barcode, Product.cost_price)).filter(Product.barcode.in_(barcodes)).all()
         } if Product is not None and barcodes else {}
         for sale in sales:
             day = sale.created_at.date().isoformat()

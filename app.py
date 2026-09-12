@@ -885,9 +885,45 @@ def set_language(lang):
     return redirect(target)
 
 
+def product_list_dict(row):
+    has_image = bool(row.has_image_data or row.image)
+    return {
+        "barcode": row.barcode,
+        "label_barcode": row.label_barcode or "",
+        "name": row.name,
+        "artist": row.artist or "",
+        "price": row.price,
+        "cost_price": row.cost_price or 0,
+        "gross_margin": gross_margin_percent(row.price, row.cost_price),
+        "stock": row.stock,
+        "warehouse_stock": row.warehouse_stock or 0,
+        "is_archived": bool(row.is_archived),
+        "restock_needed": (row.stock or 0) < 5,
+        "image": row.image,
+        "has_image": has_image,
+        "image_url": f"/product-image/{row.barcode}" if has_image else None,
+    }
+
+
+def product_list_query():
+    return Product.query.with_entities(
+        Product.barcode,
+        Product.label_barcode,
+        Product.name,
+        Product.artist,
+        Product.price,
+        Product.cost_price,
+        Product.stock,
+        Product.warehouse_stock,
+        Product.is_archived,
+        Product.image,
+        Product.image_data.isnot(None).label("has_image_data"),
+    )
+
+
 def load_inventory(include_archived=False):
-    query = Product.query.filter(Product.is_archived.is_(bool(include_archived)))
-    return [product.to_dict() for product in query.order_by(Product.barcode).all()]
+    query = product_list_query().filter(Product.is_archived.is_(bool(include_archived)))
+    return [product_list_dict(row) for row in query.order_by(Product.barcode).all()]
 
 
 def save_inventory(data):
@@ -1906,7 +1942,7 @@ def api_artists():
 def api_products_search():
     keyword = request.args.get("q", "").strip()
     artist = request.args.get("artist", "").strip()
-    query = Product.query.filter(Product.is_archived.is_(False))
+    query = product_list_query().filter(Product.is_archived.is_(False))
     if "artist" in request.args:
         query = query.filter(Product.artist == artist)
     if keyword:
@@ -1921,7 +1957,7 @@ def api_products_search():
         )
     products = query.order_by(Product.name).limit(100).all()
     return jsonify({
-        "products": [product.to_dict() for product in products],
+        "products": [product_list_dict(product) for product in products],
     })
 
 
